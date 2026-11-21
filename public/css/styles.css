@@ -711,8 +711,8 @@ label {
 
 /* =========================================================================
    화면 3 · 4 · 5 · 7 · 8: 앱 레이아웃 (/app)
-   모바일(≤768px): 방 목록 → 방 대화 → 참가자 시트
-   데스크톱(>768px): 좌 280px | 중 1fr | 우 320px (접기 가능)
+   모바일(≤960px 또는 가로로 눕힌 폰): 방 목록 → 방 대화 → 참가자 시트
+   데스크톱(>960px): 좌 280px | 중 1fr | 우 320px (접기 가능)
    ========================================================================= */
 .app-shell {
   height: 100dvh;
@@ -1562,13 +1562,13 @@ label {
 }
 
 /* =========================================================================
-   모바일 반응형 (≤ 768px) — 방 목록 → 방 대화 → 아래에서 올라오는 시트
+   모바일 반응형 (≤ 960px, 가로로 눕힌 폰 포함) — 방 목록 → 방 대화 → 아래에서 올라오는 시트
    ========================================================================= */
 .mobile-only {
   display: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 960px), (max-height: 500px) and (max-width: 1100px) {
   .mobile-only {
     display: inline-flex;
   }
@@ -1837,7 +1837,7 @@ label {
   font-size: clamp(var(--fs-22), 1.2vw + 14px, 30px);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 960px), (max-height: 500px) and (max-width: 1100px) {
   .messages-scroll,
   .status-slot,
   .trust-strip,
@@ -1852,7 +1852,7 @@ label {
   }
 }
 
-@media (min-width: 521px) and (max-width: 768px) {
+@media (min-width: 521px) and (max-width: 960px) {
   .rooms-toolbar,
   .rooms-list {
     width: 100%;
@@ -1917,4 +1917,31 @@ label {
   .guest-key-notice .mini-action-btn {
     min-height: 44px;
   }
+}
+
+/* 설정: 좁은 폰에서 사용량 카드가 한 칸씩 세로로 쌓이지 않게 2×2 */
+@media (max-width: 520px) {
+  .usage-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-2);
+  }
+
+  .usage-stat-val {
+    font-size: var(--fs-17);
+  }
+
+  .settings-card {
+    padding: var(--sp-4);
+  }
+}
+
+@media (pointer: coarse) {
+  .profile-device-options button {
+    min-height: 40px;
+  }
+}
+
+/* 세로가 모자란 화면에서 카드가 눌려 겹치지 않게 */
+.member-row {
+  flex-shrink: 0;
 }
