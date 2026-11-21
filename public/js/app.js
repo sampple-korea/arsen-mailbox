@@ -111,9 +111,13 @@ const state = {
 
   lastInputAt: Date.now(),
   lastOverviewAt: 0,
+  actionMsgId: null, // 터치에서 답장 버튼을 펼친 글
   pollTimer: null,
   expirySweepTimer: null,
 };
+
+// 노트북 폭(~1024px)에서는 대화창이 좁아지므로 참가자 패널은 접힌 채 시작한다.
+state.rightPanelCollapsed = window.innerWidth < 1200;
 
 function bumpSessionGen() {
   state.sessionGen += 1;
@@ -384,11 +388,11 @@ function renderLandingPage() {
         )
       : null;
 
+    if (savedBanner) main.appendChild(savedBanner);
     main.appendChild(
       el(
         "section",
         { className: "hero-card", "aria-labelledby": "hero-heading" },
-        savedBanner,
         el("h1", { id: "hero-heading", className: "hero-lead", text: HERO_TAGLINE }),
         el("div", { className: "hero-illustration" }, buildHeroIllustration()),
         el(
@@ -1382,10 +1386,14 @@ function renderMessagesTimeline(scrollBox) {
   const ownerSeat = members.find((p) => p.is_owner);
   let prevDateKey = "";
 
+  let prevSender = null;
+  let prevAt = 0;
   for (const m of fresh) {
     const dk = dateKeyOf(m.created_at);
-    if (dk && dk !== prevDateKey) {
+    const newDay = Boolean(dk && dk !== prevDateKey);
+    if (newDay) {
       prevDateKey = dk;
+      prevSender = null;
       scrollBox.appendChild(
         el("div", { className: "date-divider", text: formatDateLabel(m.created_at) }),
       );
@@ -1434,19 +1442,29 @@ function renderMessagesTimeline(scrollBox) {
         )
       : null;
 
+    // 같은 사람이 5분 안에 이어 쓴 글은 한 묶음으로 보여 아바타·이름 반복을 없앤다.
+    const senderKey = String(m.relayed_for || m.participant_id || m.sender);
+    const grouped = prevSender === senderKey && m.created_at - prevAt < 300;
+    prevSender = senderKey;
+    prevAt = m.created_at;
+
     const replyBtn = el(
       "button",
       {
         type: "button",
-        className: "mini-action-btn",
+        className: "msg-reply-btn",
+        "aria-label": `${displaySender}의 글에 답장`,
+        title: "답장",
         onClick: () => {
           state.replyTo = { id: m.id, sender: m.sender };
           syncReplyBar();
           document.getElementById("composer-textarea")?.focus();
         },
       },
-      "답장",
+      icon("reply", "icon-sm"),
     );
+    // 이름과 같은 종류 칩("부이 [부이]")은 중복이라 생략한다.
+    const sameLabel = kMeta.label.replace(/\s+/g, "").toLowerCase() === String(displaySender).replace(/\s+/g, "").toLowerCase();
 
     const bubble = el(
       "div",
@@ -1458,12 +1476,14 @@ function renderMessagesTimeline(scrollBox) {
       buildQuestionStatus(m, isGuest),
     );
 
-    const metaRow = isMine
+    const metaRow = grouped
+      ? el("span", { className: "sr-only", text: displaySender })
+      : isMine
       ? el(
           "div",
           { className: "msg-meta" },
           el("span", { className: "workspace-author", text: displaySender }),
-          el("span", { text: `내 글 · ${formatTime(m.created_at)}` }),
+          el("time", { text: formatTime(m.created_at) }),
           participantNotes(matchedMember),
         )
       : el(
@@ -1474,24 +1494,33 @@ function renderMessagesTimeline(scrollBox) {
             dataset: { kind: kMeta.id },
             text: displaySender,
           }),
-          el("span", { className: "chip", text: kMeta.label }),
+          sameLabel ? null : el("span", { className: "chip", text: kMeta.label }),
           serverRelayed
             ? el("span", { className: "chip chip-relay", text: "사용자가 대신 올림" })
             : null,
-          el("span", { text: formatTime(m.created_at) }),
+          el("time", { text: formatTime(m.created_at) }),
           participantNotes(matchedMember),
         );
 
+    // 터치에서는 말풍선을 눌러 답장 버튼을 연다(링크·버튼을 누른 경우는 제외).
+    bubble.addEventListener("click", (e) => {
+      if (!window.matchMedia("(pointer: coarse)").matches || e.target.closest("a,button")) return;
+      state.actionMsgId = state.actionMsgId === m.id ? null : m.id;
+      renderMessagesTimeline(scrollBox);
+    });
+
     const row = el(
       "article",
-      { className: `msg-row${isMine ? " is-mine" : ""}` },
-      buildAvatar(displaySender, kMeta.id, isMine ? "workspace-own-avatar" : "", profileWithAvatar(matchedMember)),
+      { className: `msg-row${isMine ? " is-mine" : ""}${grouped ? " is-grouped" : ""}${state.actionMsgId === m.id ? " show-actions" : ""}` },
+      grouped
+        ? el("span", { className: "avatar-spacer", "aria-hidden": "true" })
+        : buildAvatar(displaySender, kMeta.id, isMine ? "workspace-own-avatar" : "", profileWithAvatar(matchedMember)),
       el(
         "div",
         { className: "msg-col" },
         metaRow,
-        bubble,
-        el("div", { className: "msg-footer-actions" }, moreBtn, replyBtn),
+        el("div", { className: "msg-bubble-row" }, bubble, replyBtn),
+        moreBtn ? el("div", { className: "msg-footer-actions" }, moreBtn) : null,
       ),
     );
 
@@ -1570,7 +1599,12 @@ function renderDesktopMembersList(box) {
             el("span", { text: p.name }),
             el("span", { className: st.chipClass, text: st.chipText }),
           ),
-          el("span", { className: "member-row-sub", text: `${participantRoleLabel(p)} · ${meta.label}` }),
+          el("span", {
+            className: "member-row-sub",
+            text: meta.label.replace(/\s+/g, "") === p.name.replace(/\s+/g, "")
+              ? participantRoleLabel(p)
+              : `${participantRoleLabel(p)} · ${meta.label}`,
+          }),
           participantNotes(p),
           isAssistant ? buildLiveScheduleNode(p, "inline", "member-schedule-line", "span") : null,
         ),
@@ -1832,8 +1866,8 @@ async function openSpaceSettings(trigger) {
   renderApp();
 }
 
-function buildChatSettingsButton(isGuest, label = "채팅 설정") {
-  return el("button", { type: "button", className: "icon-btn", "aria-label": label, title: label,
+function buildChatSettingsButton(isGuest, label = "채팅 설정", extraClass = "") {
+  return el("button", { type: "button", className: `icon-btn${extraClass ? " " + extraClass : ""}`, "aria-label": label, title: label,
     onClick: (event) => {
       const trigger = event.currentTarget;
       const roomId = isGuest ? state.guestRoomId : state.currentRoomId;
@@ -1968,7 +2002,6 @@ function buildComposer({ isGuest }) {
           onClick: (e) => triggerRelayForParticipant(null, e.currentTarget),
         },
         icon("relay", "icon-sm"),
-        el("span", { className: "desktop-only", text: "답 옮기기" }),
       )
     : null;
 
@@ -2421,7 +2454,7 @@ function renderOwnerApp() {
       className: "input",
       type: "password",
       autocomplete: "off",
-      placeholder: "내 열쇠 링크(#k=ams_...) 또는 공간 열쇠 입력",
+      placeholder: "열쇠 링크(#k=ams_…) 또는 열쇠",
     });
     const rememberBox = el("input", { type: "checkbox" });
     const errText = el("p", { className: "composer-feedback", role: "alert", hidden: !state.statusBanner });
@@ -2632,7 +2665,8 @@ function renderOwnerApp() {
         ? el(
             "div",
             { className: "chat-header-right" },
-            buildChatSettingsButton(false),
+            // 데스크톱에서는 좌측 상단의 같은 설정 버튼이 있으므로 모바일에서만 둔다.
+            buildChatSettingsButton(false, "채팅 설정", "mobile-only"),
             el(
               "button",
               {
@@ -2667,7 +2701,7 @@ function renderOwnerApp() {
                 },
               },
               icon("users", "icon-sm"),
-              "참가자",
+              el("span", { className: "btn-label", text: "참가자" }),
             ),
             el(
               "button",
@@ -2704,6 +2738,22 @@ function renderOwnerApp() {
         "div",
         { className: "pane-topbar" },
         el("h2", { className: "pane-title", text: "참가자" }),
+        room
+          ? el(
+              "button",
+              {
+                type: "button",
+                className: "btn btn-nowrap",
+                onClick: (e) => triggerAddParticipant(e.currentTarget),
+              },
+              icon("plus", "icon-sm"),
+              "넣기",
+            )
+          : null,
+      ),
+      el(
+        "div",
+        { className: "members-toolbar" },
         el("select", { className: "select", "aria-label": "참가자 역할 필터",
           onChange: (e) => {
             state.memberFilter = e.target.value;
@@ -2714,18 +2764,6 @@ function renderOwnerApp() {
           option.selected = state.memberFilter === value;
           return option;
         })),
-        room
-          ? el(
-              "button",
-              {
-                type: "button",
-                className: "btn",
-                onClick: (e) => triggerAddParticipant(e.currentTarget),
-              },
-              icon("plus", "icon-sm"),
-              "참가자 넣기",
-            )
-          : null,
       ),
       membersBox,
     );
@@ -2835,17 +2873,21 @@ function renderGuestRoomApp() {
       el(
         "div",
         { className: "chat-header-left" },
-        el("h1", {
-          id: "guest-room-heading",
-          className: "pane-title",
-          text: state.guestMeta.roomName || "초대받은 방",
-        }),
-        el("span", {
-          id: "guest-room-identity",
-          className: "chip",
-          hidden: !state.guestMeta.meName,
-          text: state.guestMeta.meName ? `참가자: ${state.guestMeta.meName}` : "",
-        }),
+        el(
+          "div",
+          { className: "title-stack" },
+          el("h1", {
+            id: "guest-room-heading",
+            className: "pane-title",
+            text: state.guestMeta.roomName || "초대받은 방",
+          }),
+          el("span", {
+            id: "guest-room-identity",
+            className: "title-sub",
+            hidden: !state.guestMeta.meName,
+            text: state.guestMeta.meName ? `참가자: ${state.guestMeta.meName}` : "",
+          }),
+        ),
       ),
       el(
         "div",
