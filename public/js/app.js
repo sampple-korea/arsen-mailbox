@@ -1458,15 +1458,19 @@ function renderMessagesTimeline(scrollBox) {
       "button",
       {
         type: "button",
-        className: "mini-action-btn",
+        className: "msg-reply-btn",
+        "aria-label": `${displaySender}의 글에 답장`,
         onClick: () => {
           state.replyTo = { id: m.id, sender: m.sender };
           syncReplyBar();
           document.getElementById("composer-textarea")?.focus();
         },
       },
+      icon("reply", "icon-sm"),
       "답장",
     );
+    // 이름과 같은 종류 칩("부이 [부이]")은 중복이라 생략한다.
+    const sameLabel = kMeta.label.replace(/\s+/g, "").toLowerCase() === String(displaySender).replace(/\s+/g, "").toLowerCase();
 
     const bubble = el(
       "div",
@@ -1484,6 +1488,7 @@ function renderMessagesTimeline(scrollBox) {
           { className: "msg-meta" },
           el("span", { className: "workspace-author", text: displaySender }),
           el("span", { text: `내 글 · ${formatTime(m.created_at)}` }),
+          replyBtn,
           participantNotes(matchedMember),
         )
       : el(
@@ -1494,11 +1499,12 @@ function renderMessagesTimeline(scrollBox) {
             dataset: { kind: kMeta.id },
             text: displaySender,
           }),
-          el("span", { className: "chip", text: kMeta.label }),
+          sameLabel ? null : el("span", { className: "chip", text: kMeta.label }),
           serverRelayed
             ? el("span", { className: "chip chip-relay", text: "사용자가 대신 올림" })
             : null,
           el("span", { text: formatTime(m.created_at) }),
+          replyBtn,
           participantNotes(matchedMember),
         );
 
@@ -1511,7 +1517,7 @@ function renderMessagesTimeline(scrollBox) {
         { className: "msg-col" },
         metaRow,
         bubble,
-        el("div", { className: "msg-footer-actions" }, moreBtn, replyBtn),
+        moreBtn ? el("div", { className: "msg-footer-actions" }, moreBtn) : null,
       ),
     );
 
@@ -1590,7 +1596,12 @@ function renderDesktopMembersList(box) {
             el("span", { text: p.name }),
             el("span", { className: st.chipClass, text: st.chipText }),
           ),
-          el("span", { className: "member-row-sub", text: `${participantRoleLabel(p)} · ${meta.label}` }),
+          el("span", {
+            className: "member-row-sub",
+            text: meta.label.replace(/\s+/g, "") === p.name.replace(/\s+/g, "")
+              ? participantRoleLabel(p)
+              : `${participantRoleLabel(p)} · ${meta.label}`,
+          }),
           participantNotes(p),
           isAssistant ? buildLiveScheduleNode(p, "inline", "member-schedule-line", "span") : null,
         ),
@@ -1852,8 +1863,8 @@ async function openSpaceSettings(trigger) {
   renderApp();
 }
 
-function buildChatSettingsButton(isGuest, label = "채팅 설정") {
-  return el("button", { type: "button", className: "icon-btn", "aria-label": label, title: label,
+function buildChatSettingsButton(isGuest, label = "채팅 설정", extraClass = "") {
+  return el("button", { type: "button", className: `icon-btn${extraClass ? " " + extraClass : ""}`, "aria-label": label, title: label,
     onClick: (event) => {
       const trigger = event.currentTarget;
       const roomId = isGuest ? state.guestRoomId : state.currentRoomId;
@@ -1988,7 +1999,6 @@ function buildComposer({ isGuest }) {
           onClick: (e) => triggerRelayForParticipant(null, e.currentTarget),
         },
         icon("relay", "icon-sm"),
-        el("span", { className: "desktop-only", text: "답 옮기기" }),
       )
     : null;
 
@@ -2657,7 +2667,8 @@ function renderOwnerApp() {
         ? el(
             "div",
             { className: "chat-header-right" },
-            buildChatSettingsButton(false),
+            // 데스크톱에서는 좌측 상단의 같은 설정 버튼이 있으므로 모바일에서만 둔다.
+            buildChatSettingsButton(false, "채팅 설정", "mobile-only"),
             el(
               "button",
               {
@@ -2730,6 +2741,22 @@ function renderOwnerApp() {
         "div",
         { className: "pane-topbar" },
         el("h2", { className: "pane-title", text: "참가자" }),
+        room
+          ? el(
+              "button",
+              {
+                type: "button",
+                className: "btn btn-nowrap",
+                onClick: (e) => triggerAddParticipant(e.currentTarget),
+              },
+              icon("plus", "icon-sm"),
+              "넣기",
+            )
+          : null,
+      ),
+      el(
+        "div",
+        { className: "members-toolbar" },
         el("select", { className: "select", "aria-label": "참가자 역할 필터",
           onChange: (e) => {
             state.memberFilter = e.target.value;
@@ -2740,18 +2767,6 @@ function renderOwnerApp() {
           option.selected = state.memberFilter === value;
           return option;
         })),
-        room
-          ? el(
-              "button",
-              {
-                type: "button",
-                className: "btn",
-                onClick: (e) => triggerAddParticipant(e.currentTarget),
-              },
-              icon("plus", "icon-sm"),
-              "참가자 넣기",
-            )
-          : null,
       ),
       membersBox,
     );
@@ -2835,12 +2850,24 @@ function renderGuestRoomApp() {
     return;
   }
 
+  const rememberGuest = el("input", {
+    type: "checkbox",
+    checked: isRoomRemembered(roomId),
+    "aria-label": "이 기기 기억",
+  });
+  rememberGuest.addEventListener("change", () => {
+    setRoomRemember(roomId, rememberGuest.checked);
+  });
+  // 열쇠를 기기에 남길지는 열쇠 안내와 같은 줄에 둔다(헤더 컨트롤과 위계를 섞지 않는다).
+  const rememberRow = () => el("label", { className: "check-inline" }, rememberGuest, el("span", { text: "이 기기에 기억" }));
+
   // 접을 수 있는 상단 열쇠 주의 안내 (3.2 #9 정본 문구)
   const keyNoticeBar = state.guestNoticeCollapsed
     ? el(
         "div",
         { className: "trust-strip" },
         el("span", { text: "열쇠 보안 안내 접힘" }),
+        rememberRow(),
         el(
           "button",
           {
@@ -2858,7 +2885,8 @@ function renderGuestRoomApp() {
     : el(
         "div",
         { className: "guest-key-notice" },
-        el("span", { text: "이 링크가 열쇠예요. 다른 사람에게 보내지 마세요" }),
+        el("span", { className: "guest-key-text", text: "이 링크가 열쇠예요. 다른 사람에게 보내지 마세요" }),
+        rememberRow(),
         el(
           "button",
           {
@@ -2873,15 +2901,6 @@ function renderGuestRoomApp() {
           "접기",
         ),
       );
-
-  const rememberGuest = el("input", {
-    type: "checkbox",
-    checked: isRoomRemembered(roomId),
-    "aria-label": "이 기기 기억",
-  });
-  rememberGuest.addEventListener("change", () => {
-    setRoomRemember(roomId, rememberGuest.checked);
-  });
 
   const statusSlot = el("div", { id: "chat-status-slot", className: "status-slot" });
   renderStatusSlot(statusSlot);
@@ -2905,17 +2924,21 @@ function renderGuestRoomApp() {
       el(
         "div",
         { className: "chat-header-left" },
-        el("h1", {
-          id: "guest-room-heading",
-          className: "pane-title",
-          text: state.guestMeta.roomName || "초대받은 방",
-        }),
-        el("span", {
-          id: "guest-room-identity",
-          className: "chip",
-          hidden: !state.guestMeta.meName,
-          text: state.guestMeta.meName ? `참가자: ${state.guestMeta.meName}` : "",
-        }),
+        el(
+          "div",
+          { className: "title-stack" },
+          el("h1", {
+            id: "guest-room-heading",
+            className: "pane-title",
+            text: state.guestMeta.roomName || "초대받은 방",
+          }),
+          el("span", {
+            id: "guest-room-identity",
+            className: "title-sub",
+            hidden: !state.guestMeta.meName,
+            text: state.guestMeta.meName ? `참가자: ${state.guestMeta.meName}` : "",
+          }),
+        ),
       ),
       el(
         "div",
@@ -2934,12 +2957,6 @@ function renderGuestRoomApp() {
           },
         }, icon("users")),
         buildChatSettingsButton(true),
-        el(
-          "label",
-          { className: "check-row" },
-          rememberGuest,
-          el("span", { text: "기기 기억" }),
-        ),
         el("a", { className: "link-nav", href: "/help.html", text: "안내" }),
       ),
     ),
