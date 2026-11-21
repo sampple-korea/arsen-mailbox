@@ -107,6 +107,10 @@ const ICON_PATHS = {
     ["path", { d: "M4 8H18L14.5 4.5" }],
     ["path", { d: "M20 16H6L9.5 19.5" }],
   ],
+  search: [
+    ["circle", { cx: 11, cy: 11, r: 6 }],
+    ["path", { d: "M20 20L15.5 15.5" }],
+  ],
   reply: [
     ["path", { d: "M9 14L4 9L9 4" }],
     ["path", { d: "M20 20V13C20 11.3 18.7 10 17 10H4" }],
@@ -420,14 +424,14 @@ function computeScheduleStrings(intervalMin, lastSec, manualRelayOnly, now = now
         intervalLabel,
         lastText: "아직 확인 전 (직접 붙여넣기)",
         nextText: "직접 옮길 때 반영",
-        inlineText: `⇄ 직접 답 옮기기 · 주기 ${safeMin}분 · 최근 아직 확인 전`,
+        inlineText: "답은 [답 옮기기]로 직접 붙여넣어요",
       };
     }
     return {
       intervalLabel,
       lastText: "아직 확인 전",
       nextText: "첫 확인 대기",
-      inlineText: `주기 ${safeMin}분 · 최근 아직 확인 전 · 다음 첫 확인 대기`,
+      inlineText: "연결 문구를 비서에게 붙여 넣으면 시작돼요",
     };
   }
 
@@ -440,7 +444,7 @@ function computeScheduleStrings(intervalMin, lastSec, manualRelayOnly, now = now
       intervalLabel,
       lastText,
       nextText: "직접 옮길 때 반영",
-      inlineText: `⇄ 직접 답 옮기기 · 주기 ${safeMin}분 · 최근 ${lastText}`,
+      inlineText: `직접 옮김 · 최근 ${agoText}`,
     };
   }
 
@@ -465,7 +469,7 @@ function computeScheduleStrings(intervalMin, lastSec, manualRelayOnly, now = now
     intervalLabel,
     lastText,
     nextText,
-    inlineText: `주기 ${safeMin}분 · 최근 ${lastText} · 다음 ${nextShort}`,
+    inlineText: `${safeMin}분 주기 · 최근 ${agoText} · ${nextShort}`,
   };
 }
 

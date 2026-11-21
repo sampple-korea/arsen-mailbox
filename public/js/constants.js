@@ -264,7 +264,7 @@ export function sortParticipantKindsByUsage({
 export const ERROR_MESSAGES = {
   unauthorized: "열쇠가 없거나 만료되었습니다. 저장한 열쇠 링크로 다시 열어 주세요.",
   forbidden: "이 열쇠로는 접근할 수 없거나 사람 확인에 실패했습니다.",
-  rate_limited: "빈 확인 반복 제한(30초) 또는 요청 한도에 걸렸습니다. 잠시 뒤에 다시 시도해 주세요.",
+  rate_limited: "요청이 많아 잠시 제한됐어요. 잠시 뒤에 다시 시도해 주세요.",
   quota: "공간의 방, 참가자 또는 일일 글 상한에 도달했습니다.",
   not_found: "요청한 방이나 대상을 찾을 수 없습니다.",
   invalid: "입력 형식을 확인해 주세요. 민감 정보나 허용되지 않는 문자는 보낼 수 없습니다.",
@@ -280,10 +280,15 @@ export const ERROR_MESSAGES = {
   network: "서버에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.",
 };
 
-export function errorMessage(err) {
+/** `context: "send"`는 글을 보낼 때의 오류라, 같은 코드라도 상황에 맞는 문구를 쓴다. */
+export function errorMessage(err, context = "") {
   const code = err?.code || "";
   if (code === "rate_limited" && Number.isFinite(err?.retryAfter) && err.retryAfter > 0) {
-    return `요청 간격 제한 중입니다. 약 ${err.retryAfter}초 뒤에 다시 시도해 주세요.`;
+    return `잠시 제한 중이에요. 약 ${err.retryAfter}초 뒤에 다시 시도해 주세요.`;
+  }
+  if (context === "send") {
+    if (code === "rate_limited") return "너무 빨리 보내고 있어요. 잠시 뒤에 다시 보내 주세요.";
+    if (code === "invalid") return "보낼 수 없는 내용이에요. 비밀번호·열쇠처럼 보이는 내용이나 허용되지 않는 문자가 없는지 확인해 주세요.";
   }
   return ERROR_MESSAGES[code] || "요청을 처리하지 못했습니다. 잠시 뒤 다시 시도해 주세요.";
 }

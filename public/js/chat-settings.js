@@ -964,11 +964,6 @@ export function openChatSettings(
           "section",
           { className: "chat-settings-section" },
           el(
-            "div",
-            { className: "chat-settings-section-head" },
-            el("h3", { className: "chat-settings-section-title", text: "공간 열쇠 · 복구 코드 · 한도 관리" }),
-          ),
-          el(
             "button",
             {
               type: "button",
@@ -979,7 +974,7 @@ export function openChatSettings(
               },
             },
             icon("shield", "icon-sm"),
-            "공간 열쇠·복구 설정 화면으로 이동",
+            "공간 설정 (열쇠·복구 코드·한도)",
           ),
         );
       }
@@ -1048,10 +1043,7 @@ export function openChatSettings(
 
       syncAllControls();
 
-      const rootContainer = el(
-        "div",
-        { className: "chat-settings-root" },
-        previewBox,
+      const displaySections = [
         el(
           "section",
           { className: "chat-settings-section" },
@@ -1124,9 +1116,24 @@ export function openChatSettings(
           ),
           notifyStatus,
         ),
-        ownerRenameSection,
-        exportSection,
+      ];
+      const [skinSection, themeSection, fontSection, sendKeySection, notifySection] = displaySections;
+      // 한 시트에 모두 펼치면 모바일에서 3,000px가 넘으므로, 묶음으로 접어 두고 자주 쓰는 '화면'만 펼친다.
+      const group = (title, open, ...children) =>
+        el(
+          "details",
+          { className: "fold", open },
+          el("summary", {}, el("span", { text: title })),
+          el("div", { className: "fold-body" }, ...children),
+        );
+      const rootContainer = el(
+        "div",
+        { className: "chat-settings-root" },
         spaceKeyBridgeSection,
+        group("화면 꾸미기", true, previewBox, skinSection, themeSection, fontSection),
+        group("입력과 알림", false, sendKeySection, notifySection),
+        ownerRenameSection ? group("내 이름", false, ownerRenameSection) : null,
+        exportSection ? group("대화 내보내기", false, exportSection) : null,
         el("div", { className: "chat-settings-footer" }, resetPrefsBtn, doneBtn),
       );
 

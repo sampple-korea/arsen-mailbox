@@ -25,12 +25,14 @@ import {
   dateKeyOf,
   el,
   filterFreshMessages,
+  formatAgo,
   formatDateLabel,
   formatTime,
   icon,
   isLongMessage,
   nowSeconds,
   refreshLiveCheckNodes,
+  resolveLastCheckedSeconds,
 } from "./dom.js?v=2.2.2";
 import { MAX_SEND_CHUNKS, splitMessageText } from "./message-split.js?v=2.2.2";
 import {
@@ -57,6 +59,7 @@ import {
   openRelaySheet,
   openRoomCreateSheet,
   openRoomManageSheet,
+  openRoomSwitchSheet,
   serverParticipantStatus,
 } from "./sheets.js?v=2.2.2";
 import { PARTICIPANT_FILTERS, participantNotes, participantRole, participantRoleLabel } from "./participant-avatar.js?v=2.2.2";
@@ -112,6 +115,10 @@ const state = {
   lastInputAt: Date.now(),
   lastOverviewAt: 0,
   actionMsgId: null, // 터치에서 답장 버튼을 펼친 글
+  forceBottom: false,
+  seenId: null, // 화면 맨 아래까지 읽은 마지막 글 번호(null = 아직 모름)
+  unseenCount: 0,
+  drafts: new Map(), // 방별 쓰던 글(새로고침 전까지만 메모리에 보관)
   pollTimer: null,
   expirySweepTimer: null,
 };
@@ -991,11 +998,14 @@ function resetRoomView(roomId) {
   state.guestMeta = { roomName: "", meName: "", meId: "" };
   state.memberFilter = "all";
   state.replyTo = null;
+  state.seenId = null;
+  state.unseenCount = 0;
   state.settingsOpen = false;
 }
 
 async function selectRoom(roomId, switchMobileToChat = true) {
   if (!state.rooms.some((r) => r.room_id === roomId)) return;
+  saveDraft();
   resetRoomView(roomId);
   window.history.replaceState(null, "", `/app/${encodeURIComponent(roomId)}/`);
   if (switchMobileToChat) state.mobilePane = "chat";
@@ -1266,6 +1276,24 @@ function renderStatusSlot(slot) {
   );
 }
 
+function openRoomSwitcher(trigger = null) {
+  if (state.route !== "app" || !getSpaceKey() || !state.rooms.length) return;
+  openRoomSwitchSheet(sheets, {
+    rooms: state.rooms,
+    currentId: state.currentRoomId,
+    trigger,
+    onPick: (roomId) => selectRoom(roomId),
+  });
+}
+
+window.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+    if (state.route !== "app" || !getSpaceKey()) return;
+    e.preventDefault();
+    openRoomSwitcher();
+  }
+});
+
 function renderRoomListItems(listBox) {
   clearNode(listBox);
   if (!state.rooms.length) {
@@ -1338,6 +1366,69 @@ function renderRoomListItems(listBox) {
   }
 }
 
+/** 쓰던 글을 방별로 메모리에 보관한다(방을 옮겨도 사라지지 않게). 저장소에는 남기지 않는다. */
+function saveDraft() {
+  const area = document.getElementById("composer-textarea");
+  const roomId = state.route === "guest" ? state.guestRoomId : state.currentRoomId;
+  if (!area || !roomId) return;
+  if (area.value.trim()) state.drafts.set(roomId, area.value);
+  else state.drafts.delete(roomId);
+}
+
+window.addEventListener("beforeunload", (e) => {
+  const area = document.getElementById("composer-textarea");
+  if (area?.value.trim()) {
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});
+
+/** 메시지 목록 + "새 글 N개 ↓" 버튼. 위로 스크롤해 읽는 중에 새 글이 오면 알려준다. */
+function buildMessagesWrap(scrollBox) {
+  const jump = el(
+    "button",
+    {
+      type: "button",
+      className: "jump-latest",
+      hidden: true,
+      onClick: () => {
+        scrollBox.scrollTop = scrollBox.scrollHeight;
+        state.unseenCount = 0;
+        state.seenId = state.messages.reduce((mx, m) => Math.max(mx, Number(m.id) || 0), 0);
+        syncDocumentTitle();
+        jump.hidden = true;
+      },
+    },
+    icon("chevronDown", "icon-sm"),
+    el("span", { text: "새 글" }),
+  );
+  scrollBox.addEventListener(
+    "scroll",
+    () => {
+      if (scrollBox.scrollHeight - scrollBox.scrollTop - scrollBox.clientHeight < 64 && state.unseenCount) {
+        state.unseenCount = 0;
+        state.seenId = state.messages.reduce((mx, m) => Math.max(mx, Number(m.id) || 0), 0);
+        jump.hidden = true;
+        syncDocumentTitle();
+      }
+    },
+    { passive: true },
+  );
+  return el("div", { className: "messages-wrap" }, scrollBox, jump);
+}
+
+/** 탭 제목에 읽지 않은 글 수를 붙인다(화면이 보이는 동안 갱신된 값 기준). */
+function syncDocumentTitle() {
+  let unread = state.unseenCount;
+  let base = BRAND_NAME;
+  if (state.route === "guest") {
+    base = state.guestMeta.roomName || BRAND_NAME;
+  } else if (state.route === "app") {
+    for (const r of state.rooms) if (r.room_id !== state.currentRoomId) unread += Number(r.unread_count) || 0;
+  }
+  document.title = unread > 0 ? `(${unread > 99 ? "99+" : unread}) ${base}` : base;
+}
+
 function renderMessagesTimeline(scrollBox) {
   const wasNearBottom =
     scrollBox.scrollHeight - scrollBox.scrollTop - scrollBox.clientHeight < 64;
@@ -1359,24 +1450,30 @@ function renderMessagesTimeline(scrollBox) {
 
   // 렌더링 직전에도 항상 30일 만료 필터 강제 적용
   const fresh = filterFreshMessages(state.messages, nowSeconds(), state.retentionDays);
+  const latestId = fresh.reduce((mx, m) => Math.max(mx, Number(m.id) || 0), 0);
+  const forceBottom = state.forceBottom;
+  state.forceBottom = false;
+  if (state.seenId === null || wasNearBottom || forceBottom) {
+    state.seenId = latestId;
+    state.unseenCount = 0;
+  } else {
+    state.unseenCount = fresh.filter((m) => Number(m.id) > state.seenId).length;
+  }
+  const jumpButton = scrollBox.parentElement?.querySelector(".jump-latest");
+  if (jumpButton) {
+    jumpButton.hidden = state.unseenCount === 0;
+    const label = jumpButton.querySelector("span");
+    if (label) label.textContent = `새 글 ${state.unseenCount}개`;
+  }
+  syncDocumentTitle();
   if (!fresh.length) {
     scrollBox.appendChild(
       el(
         "div",
         { className: "empty-state" },
-        el("p", { text: "아직 글이 없어요. 참가자를 넣고 첫 글을 써 보세요" }),
-        !isGuest
-          ? el(
-              "button",
-              {
-                type: "button",
-                className: "btn btn-primary",
-                onClick: (e) => triggerAddParticipant(e.currentTarget),
-              },
-              icon("plus", "icon-sm"),
-              "참가자 넣기",
-            )
-          : null,
+        isGuest
+          ? el("p", { text: "아직 글이 없어요. 첫 글을 써 보세요." })
+          : buildStartChecklist(currentParticipants()),
       ),
     );
     return;
@@ -1463,6 +1560,32 @@ function renderMessagesTimeline(scrollBox) {
       },
       icon("reply", "icon-sm"),
     );
+    const copyBtn = el(
+      "button",
+      {
+        type: "button",
+        className: "msg-reply-btn msg-copy-btn",
+        "aria-label": `${displaySender}의 글 복사`,
+        title: "복사",
+        onClick: async (e) => {
+          const btn = e.currentTarget;
+          try {
+            await navigator.clipboard.writeText(m.text);
+            btn.title = "복사했어요";
+            btn.replaceChildren(icon("check", "icon-sm"));
+          } catch {
+            btn.title = "복사하지 못했어요";
+          }
+          window.setTimeout(() => {
+            if (btn.isConnected) {
+              btn.title = "복사";
+              btn.replaceChildren(icon("copy", "icon-sm"));
+            }
+          }, 1500);
+        },
+      },
+      icon("copy", "icon-sm"),
+    );
     // 이름과 같은 종류 칩("부이 [부이]")은 중복이라 생략한다.
     const sameLabel = kMeta.label.replace(/\s+/g, "").toLowerCase() === String(displaySender).replace(/\s+/g, "").toLowerCase();
 
@@ -1519,7 +1642,7 @@ function renderMessagesTimeline(scrollBox) {
         "div",
         { className: "msg-col" },
         metaRow,
-        el("div", { className: "msg-bubble-row" }, bubble, replyBtn),
+        el("div", { className: "msg-bubble-row" }, bubble, replyBtn, copyBtn),
         moreBtn ? el("div", { className: "msg-footer-actions" }, moreBtn) : null,
       ),
     );
@@ -1527,7 +1650,7 @@ function renderMessagesTimeline(scrollBox) {
     scrollBox.appendChild(row);
   }
 
-  if (wasNearBottom) {
+  if (wasNearBottom || forceBottom) {
     scrollBox.scrollTop = scrollBox.scrollHeight;
   }
 }
@@ -1535,6 +1658,48 @@ function renderMessagesTimeline(scrollBox) {
 function canRelayFor(participant, directlyAddressed = false) {
   return participant?.kind === "assistant" && !participant.revoked &&
     (kindMeta(participant).manualRelayOnly || (directlyAddressed && participant.status === "created"));
+}
+
+/** 빈 방에서 방장이 무엇을 해야 하는지 3단계로 보여준다. */
+function buildStartChecklist(members) {
+  const others = members.filter((p) => !p.is_owner && !p.revoked);
+  const hasMember = others.length > 0;
+  const connected = others.some((p) => p.kind === "assistant" && (p.status === "connected" || p.status === "last_seen"));
+  const steps = [
+    ["참가자 넣기", "비서나 사람을 이 방에 넣어요.", hasMember],
+    ["비서에게 연결 문구 붙여넣기", "만들어진 문구를 비서 앱에 붙여 넣으면 연결돼요.", connected],
+    ["첫 글 쓰기", "아래 입력창에 글을 쓰고 보내 보세요.", false],
+  ];
+  const firstOpen = steps.findIndex(([, , done]) => !done);
+  return el(
+    "div",
+    { className: "start-steps" },
+    el("h3", { text: "이 방을 시작해 볼까요?" }),
+    el(
+      "ol",
+      {},
+      ...steps.map(([title, hint, done], i) =>
+        el(
+          "li",
+          { className: `${done ? "is-done" : ""}${i === firstOpen ? " is-current" : ""}` },
+          el("span", { className: "start-step-mark", "aria-hidden": "true", text: done ? "✓" : String(i + 1) }),
+          el("span", { className: "start-step-text" }, el("strong", { text: title }), el("span", { text: hint })),
+        ),
+      ),
+    ),
+    hasMember
+      ? null
+      : el(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-primary",
+            onClick: (e) => triggerAddParticipant(e.currentTarget),
+          },
+          icon("plus", "icon-sm"),
+          "참가자 넣기",
+        ),
+  );
 }
 
 function buildQuestionStatus(message, isGuest) {
@@ -1545,10 +1710,19 @@ function buildQuestionStatus(message, isGuest) {
   for (const target of targets) {
     const done = target.answered_at !== null;
     const waiting = target.step > 1 && targets.some((p) => p.step < target.step && p.reply_id === null);
-    const text = done ? `답변 완료 · ${target.answered_at - target.asked_at}초` : waiting ? "앞 답변 대기" : "답변 대기";
+    const participant = currentParticipants().find((p) => p.participant_id === target.participant_id);
+    let text = done ? `답변 완료 · ${target.answered_at - target.asked_at}초` : waiting ? "앞 답변 대기" : "답변 대기";
+    if (!done && !waiting) {
+      // 답이 늦을 때 원인을 짐작할 수 있게: 얼마나 기다렸는지와 비서가 마지막으로 읽은 시각
+      const mins = Math.max(0, Math.floor((nowSeconds() - target.asked_at) / 60));
+      text += mins < 1 ? " · 방금" : ` · ${mins}분째`;
+      if (participant?.kind === "assistant" && !participant.is_owner && !kindMeta(participant).manualRelayOnly) {
+        const last = resolveLastCheckedSeconds(participant);
+        text += last ? ` · 비서 최근 확인 ${formatAgo(last)}` : " · 아직 연결 전";
+      }
+    }
     const label = `${target.step ? `${target.step}. ` : ""}${target.participant_name}`;
     chips.append(el("span", { className: done ? "chip chip-connected" : "chip", text: `${label} · ${text}` }));
-    const participant = currentParticipants().find((p) => p.participant_id === target.participant_id);
     if (isGuest || done || waiting || !canRelayFor(participant, target.direct === 1)) continue;
     const prior = targets.find((p) => p.step === target.step - 1);
     const reply = prior ? state.messages.find((m) => m.id === prior.reply_id) : null;
@@ -1599,12 +1773,12 @@ function renderDesktopMembersList(box) {
             el("span", { text: p.name }),
             el("span", { className: st.chipClass, text: st.chipText }),
           ),
-          el("span", {
-            className: "member-row-sub",
-            text: meta.label.replace(/\s+/g, "") === p.name.replace(/\s+/g, "")
-              ? participantRoleLabel(p)
-              : `${participantRoleLabel(p)} · ${meta.label}`,
-          }),
+          // 비서는 아바타·이름으로 종류가 보이므로, 이름이 종류와 다를 때만 종류를 덧붙인다.
+          (() => {
+            const sameName = meta.label.replace(/\s+/g, "") === p.name.replace(/\s+/g, "");
+            const text = isAssistant ? (sameName ? "" : meta.label) : participantRoleLabel(p);
+            return text ? el("span", { className: "member-row-sub", text }) : null;
+          })(),
           participantNotes(p),
           isAssistant ? buildLiveScheduleNode(p, "inline", "member-schedule-line", "span") : null,
         ),
@@ -1943,6 +2117,12 @@ function buildComposer({ isGuest }) {
     "aria-describedby": "composer-shortcut-hint",
   });
 
+  {
+    const draftRoom = isGuest ? state.guestRoomId : state.currentRoomId;
+    const draft = draftRoom ? state.drafts.get(draftRoom) : "";
+    if (draft) textarea.value = draft;
+  }
+
   const shortcutHint = el("p", {
     id: "composer-shortcut-hint",
     className: "composer-hint",
@@ -1980,7 +2160,10 @@ function buildComposer({ isGuest }) {
     sendBtn.disabled = sending || !val.trim() || Boolean(err);
   }
 
-  textarea.addEventListener("input", syncInputState);
+  textarea.addEventListener("input", () => {
+    syncInputState();
+    saveDraft();
+  });
   textarea.addEventListener("keydown", (e) => {
     const submit = shouldSubmitMessage(e);
     if (submit) {
@@ -2036,6 +2219,8 @@ function buildComposer({ isGuest }) {
           });
           if (generation !== state.sessionGen || view !== state.roomGen) return;
           textarea.value = "";
+          state.drafts.delete(roomId);
+          state.forceBottom = true;
           textarea.rows = 1;
           state.replyTo = null;
           syncReplyBar();
@@ -2056,7 +2241,7 @@ function buildComposer({ isGuest }) {
             syncReplyBar();
             pollCurrentRoom(false);
           }
-          feedback.textContent = (partial ? `${ex.sentCount}개만 올라갔어요. 남은 글은 입력창에 두었어요. ` : "") + errorMessage(ex);
+          feedback.textContent = (partial ? `${ex.sentCount}개만 올라갔어요. 남은 글은 입력창에 두었어요. ` : "") + errorMessage(ex, "send");
           feedback.hidden = false;
         } finally {
           sending = false;
@@ -2071,6 +2256,7 @@ function buildComposer({ isGuest }) {
     feedback,
   );
 
+  if (textarea.value) queueMicrotask(syncInputState);
   return form;
 }
 
@@ -2332,18 +2518,12 @@ function buildSettingsPane() {
           icon("arrowLeft", "icon-sm"),
           "돌아가기",
         ),
-        el("h1", { id: "settings-heading", className: "pane-title", text: "설정" }),
+        el("h1", { id: "settings-heading", className: "pane-title", text: "공간 설정" }),
       ),
     ),
     el(
       "div",
       { className: "settings-scroll" },
-      el(
-        "section",
-        { className: "settings-card" },
-        el("h2", { text: "화면 테마" }),
-        buildThemeSelector("테마 선택"),
-      ),
       el(
         "section",
         { className: "settings-card" },
@@ -2556,7 +2736,22 @@ function renderOwnerApp() {
       "div",
       { className: "pane-topbar" },
       el("span", { className: "pane-title", text: BRAND_NAME }),
-      buildChatSettingsButton(false, "설정 열기"),
+      el(
+        "div",
+        { className: "chat-header-right" },
+        el(
+          "button",
+          {
+            type: "button",
+            className: "icon-btn",
+            "aria-label": "방 이동 (Ctrl+K)",
+            title: "방 이동 (Ctrl+K)",
+            onClick: (e) => openRoomSwitcher(e.currentTarget),
+          },
+          icon("search"),
+        ),
+        buildChatSettingsButton(false, "설정 열기"),
+      ),
     ),
     el(
       "div",
@@ -2721,7 +2916,7 @@ function renderOwnerApp() {
         : null,
     ),
     statusSlot,
-    msgScrollBox,
+    buildMessagesWrap(msgScrollBox),
     room ? buildComposer({ isGuest: false }) : null,
   );
   shell.appendChild(chatPane);
@@ -2916,7 +3111,7 @@ function renderGuestRoomApp() {
       ),
     ),
     statusSlot,
-    el("main", { id: "main-focus", tabindex: "-1", className: "chat-pane" }, msgScrollBox),
+    el("main", { id: "main-focus", tabindex: "-1", className: "chat-pane" }, buildMessagesWrap(msgScrollBox)),
     buildComposer({ isGuest: true }),
   );
 

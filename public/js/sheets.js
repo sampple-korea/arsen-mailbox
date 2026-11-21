@@ -89,9 +89,9 @@ export function serverParticipantStatus(p) {
   }
   return {
     stage: 1,
-    chipText: "문구 만듦",
-    chipClass: "chip",
-    detailText: "연결 문구를 발급했으며 아직 서버에 첫 확인이 기록되지 않았습니다.",
+    chipText: "연결 대기",
+    chipClass: "chip chip-relay",
+    detailText: "연결 문구를 발급했어요. 비서에게 붙여 넣으면 첫 확인이 기록되고 '연결됨'으로 바뀝니다.",
     lastSec: null,
   };
 }
@@ -320,7 +320,12 @@ function buildIntervalControl({ selectId, customInputId, initialMinutes = DEFAUL
       "div",
       { className: "doc-list" },
       presetBar,
-      el("div", { className: "interval-custom-row" }, selectEl, customInput),
+      el(
+        "label",
+        { className: "interval-custom-row" },
+        el("span", { className: "field-hint", text: "직접 입력(분)" }),
+        customInput,
+      ),
     ),
     selectEl,
     customInput,
@@ -521,6 +526,7 @@ export function openAddParticipantSheet(
       });
 
       const profiles = profileFields("add-member");
+      const advancedHint = el("span", { className: "fold-hint" });
 
       const kindGrid = el("div", {
         className: "kind-grid",
@@ -567,12 +573,12 @@ export function openAddParticipantSheet(
       radioHeader.checked = true;
       radioGet.checked = false;
 
-      const deliveryTitle = el("span", { className: "field-label", text: "열쇠 전달 방식" });
+      const deliveryTitle = el("span", { className: "field-label", text: "연결 방식" });
       const headerLabelText = el("span", {
-        text: "헤더 방식 (권장 · 주소에 열쇠 남지 않음)",
+        text: "표준 연결 (권장 · 주소에 열쇠가 남지 않아요)",
       });
       const getLabelText = el("span", {
-        text: "주소(GET) 방식 (헤더를 못 쓰는 외부 비서용)",
+        text: "주소 연결 (표준 연결을 못 쓰는 외부 비서용)",
       });
 
       const getWarn = el(
@@ -589,8 +595,8 @@ export function openAddParticipantSheet(
       function syncDeliveryUI() {
         const saved = initialSettings(selectedKind);
         deliveryTitle.textContent = remembered[selectedKind.ai_type]
-          ? `열쇠 전달 방식 (이 공간에 기억됨 · ${saved.delivery === "get" ? "주소 GET" : "헤더"} · ${saved.interval_minutes}분)`
-          : "열쇠 전달 방식";
+          ? `연결 방식 (이 공간에 기억됨 · ${saved.delivery === "get" ? "주소 연결" : "표준 연결"} · ${saved.interval_minutes}분)`
+          : "연결 방식";
         radioHeader.checked = selectedDelivery === "header";
         radioGet.checked = selectedDelivery === "get";
         getWarn.hidden = selectedDelivery !== "get";
@@ -606,7 +612,14 @@ export function openAddParticipantSheet(
           const manual = kind.manualRelayOnly;
           badge.className = manual ? "chip chip-relay" : delivery === "get" ? "chip chip-connected" : "chip";
           badge.textContent = kind.kind === "human" ? "전용 초대 링크" : manual ? "⇄ 답 옮기기"
-            : `${delivery === "get" ? "주소 GET" : "헤더"} · ${minutes === null ? "주기 입력" : `${minutes}분${kind.id === "vooy" ? " 캘린더" : ""}`}`;
+            : `${delivery === "get" ? "주소 연결" : "표준 연결"} · ${minutes === null ? "주기 입력" : `${minutes}분${kind.id === "vooy" ? " 캘린더" : ""}`}`;
+        }
+        if (advancedHint) {
+          const picked = selectedKind;
+          const minutes = intervalControl.validate().minutes;
+          advancedHint.textContent = picked.kind === "assistant" && !picked.manualRelayOnly
+            ? `${selectedDelivery === "get" ? "주소 연결" : "표준 연결"} · ${minutes === null ? "주기 입력" : `${minutes}분`}`
+            : "";
         }
       }
 
@@ -796,22 +809,24 @@ export function openAddParticipantSheet(
         el(
           "div",
           { className: "field" },
-          el("label", { className: "field-label", for: "add-member-name", text: `참가자 이름 (${roomName})` }),
-          nameInput,
-        ),
-        profiles.element,
-        el(
-          "div",
-          { className: "field" },
-          el("span", { className: "field-label", text: "종류 선택 (자주 쓰는 비서 우선)" }),
+          el("span", { className: "field-label", text: "누구를 넣을까요?" }),
           kindGrid,
         ),
         harkManualBanner,
-        deliverySection,
-        intervalSection,
-        rememberSection,
+        el(
+          "div",
+          { className: "field" },
+          el("label", { className: "field-label", for: "add-member-name", text: `이름 (${roomName})` }),
+          nameInput,
+        ),
+        el(
+          "details",
+          { className: "fold" },
+          el("summary", {}, el("span", { text: "추가 설정" }), advancedHint),
+          el("div", { className: "fold-body" }, profiles.element, deliverySection, intervalSection, rememberSection),
+        ),
         errLine,
-        el("div", { className: "field" }, submitBtn),
+        el("div", { className: "sheet-actions" }, submitBtn),
       );
 
       renderKindCards();
@@ -1423,6 +1438,74 @@ export function openMessageSheet(sheets, { sender, when, text, trigger }) {
         status,
         buildSafeMessageNodes(text),
       );
+    },
+  });
+}
+
+/** 방 전환(Ctrl/⌘+K): 이름으로 거르고 방향키·Enter로 고른다. */
+export function openRoomSwitchSheet(sheets, { rooms, currentId, trigger, onPick }) {
+  sheets.openSheet({
+    title: "방 이동",
+    trigger,
+    buildBody: (bodyBox, closeSheet) => {
+      const input = el("input", {
+        className: "input",
+        type: "search",
+        placeholder: "방 이름 검색",
+        autocomplete: "off",
+        "aria-label": "방 이름 검색",
+      });
+      const list = el("div", { className: "switch-list", role: "listbox", "aria-label": "방 목록" });
+      let shown = [];
+      let active = 0;
+
+      const choose = (room) => {
+        closeSheet();
+        onPick(room.room_id);
+      };
+      const paint = () => {
+        clearNode(list);
+        const q = input.value.trim().toLowerCase();
+        shown = rooms.filter((r) => !q || r.name.toLowerCase().includes(q));
+        active = Math.min(active, Math.max(0, shown.length - 1));
+        if (!shown.length) {
+          list.appendChild(el("p", { className: "field-hint", text: "찾는 방이 없어요." }));
+          return;
+        }
+        shown.forEach((room, i) => {
+          list.appendChild(
+            el(
+              "button",
+              {
+                type: "button",
+                className: "switch-item",
+                role: "option",
+                "aria-selected": String(i === active),
+                onClick: () => choose(room),
+              },
+              el("span", { className: "switch-name", text: room.name }),
+              room.room_id === currentId ? el("span", { className: "chip", text: "지금 방" }) : null,
+              room.unread_count > 0 ? el("span", { className: "unread-badge", text: String(room.unread_count) }) : null,
+            ),
+          );
+        });
+      };
+      input.addEventListener("input", () => {
+        active = 0;
+        paint();
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          if (shown.length) active = (active + (e.key === "ArrowDown" ? 1 : -1) + shown.length) % shown.length;
+          paint();
+        } else if (e.key === "Enter" && shown[active]) {
+          e.preventDefault();
+          choose(shown[active]);
+        }
+      });
+      bodyBox.append(input, list);
+      paint();
     },
   });
 }

@@ -1512,7 +1512,8 @@ label {
 }
 
 .sheet-body {
-  padding: var(--sp-5);
+  --sheet-pad: var(--sp-5);
+  padding: var(--sheet-pad);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1844,7 +1845,7 @@ label {
   }
 
   .sheet-body {
-    padding: var(--sp-4);
+    --sheet-pad: var(--sp-4);
   }
 }
 
@@ -1972,4 +1973,257 @@ label:not(.check-row) {
   background: transparent;
   font-size: var(--fs-13);
   color: var(--muted);
+}
+
+
+/* =========================================================================
+   12. 흐름 개선: 접이식 묶음 · 고정 버튼 · 시작 체크리스트 · 새 글 버튼 · 방 이동
+   ========================================================================= */
+/* 길고 드문 설정은 접어 두고, 접힌 상태에서도 현재 값을 한 줄로 보여준다 */
+.fold {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.fold > summary {
+  min-height: var(--control-h);
+  padding: 0 var(--sp-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: var(--fs-14);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fold > summary::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.15s;
+}
+
+.fold[open] > summary::after {
+  transform: rotate(-135deg) translateY(-2px);
+}
+
+.fold-hint {
+  margin-left: auto;
+  font-size: var(--fs-12);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.fold-body {
+  padding: var(--sp-1) var(--sp-4) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.fold-body > .chat-settings-section {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+/* 가장 중요한 버튼은 긴 시트에서도 항상 보이게 */
+.sheet-actions {
+  position: sticky;
+  bottom: calc(var(--sheet-pad) * -1);
+  margin: 0 calc(var(--sheet-pad) * -1) calc(var(--sheet-pad) * -1);
+  padding: var(--sp-3) var(--sheet-pad);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.interval-custom-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.interval-custom-row .input {
+  max-width: 120px;
+}
+
+/* 빈 방: 무엇을 해야 하는지 3단계 */
+.start-steps {
+  width: 100%;
+  max-width: 400px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  color: var(--text);
+}
+
+.start-steps h3 {
+  font-size: var(--fs-16);
+  text-align: center;
+}
+
+.start-steps ol {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.start-steps li {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  padding: var(--sp-3);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.start-steps li.is-current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.start-steps li.is-done {
+  opacity: 0.6;
+}
+
+.start-step-mark {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: var(--fs-12);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.start-steps li.is-current .start-step-mark {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.start-steps li.is-done .start-step-mark {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.start-step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-13);
+  color: var(--muted);
+}
+
+.start-step-text strong {
+  font-size: var(--fs-14);
+  color: var(--text);
+}
+
+.start-steps .btn {
+  align-self: center;
+}
+
+/* 위로 스크롤해 읽는 중에 새 글이 오면 */
+.messages-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages-wrap > .messages-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.jump-latest {
+  position: absolute;
+  left: 50%;
+  bottom: var(--sp-4);
+  transform: translateX(-50%);
+  min-height: var(--control-h-sm);
+  padding: 0 var(--sp-4);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--fs-13);
+  font-weight: 600;
+  box-shadow: var(--shadow-float);
+  cursor: pointer;
+}
+
+/* 방 이동(Ctrl/⌘+K) */
+.switch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.switch-item {
+  min-height: var(--control-h);
+  padding: 0 var(--sp-3);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.switch-item:hover,
+.switch-item[aria-selected="true"] {
+  background: var(--accent-soft);
+}
+
+.switch-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-14);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 대화 설정의 스킨 선택: 설명 문장은 접고 작은 2열 카드로 */
+.chat-skin-card-desc {
+  display: none;
+}
+
+/* 움직임을 줄이도록 설정한 사용자에게는 전환·애니메이션을 끈다 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
