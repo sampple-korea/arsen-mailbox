@@ -2452,7 +2452,7 @@ function renderOwnerApp() {
       className: "input",
       type: "password",
       autocomplete: "off",
-      placeholder: "내 열쇠 링크(#k=ams_...) 또는 공간 열쇠 입력",
+      placeholder: "열쇠 링크(#k=ams_…) 또는 열쇠",
     });
     const rememberBox = el("input", { type: "checkbox" });
     const errText = el("p", { className: "composer-feedback", role: "alert", hidden: !state.statusBanner });
@@ -2703,7 +2703,7 @@ function renderOwnerApp() {
                 },
               },
               icon("users", "icon-sm"),
-              "참가자",
+              el("span", { className: "btn-label", text: "참가자" }),
             ),
             el(
               "button",

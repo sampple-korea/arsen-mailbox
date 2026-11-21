@@ -1813,3 +1813,108 @@ label {
     flex-basis: 100%;
   }
 }
+
+/* =========================================================================
+   해상도·화면 비율 대응
+   ========================================================================= */
+/* 대화 영역은 아무리 넓어도 읽기 좋은 폭(약 760px)으로 가운데에 모은다. */
+.messages-scroll,
+.status-slot,
+.trust-strip,
+.composer-wrap {
+  padding-inline: max(var(--sp-4), calc((100% - 760px) / 2));
+}
+
+/* 큰 화면에서 첫 화면이 위쪽에만 붙어 있지 않게 */
+.public-page > main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.hero-lead {
+  font-size: clamp(var(--fs-22), 1.2vw + 14px, 30px);
+}
+
+@media (max-width: 768px) {
+  .messages-scroll,
+  .status-slot,
+  .trust-strip,
+  .composer-wrap {
+    padding-inline: max(var(--sp-3), calc((100% - 760px) / 2));
+  }
+
+  /* 태블릿 세로: 바닥 시트가 화면 전체로 늘어나지 않게 */
+  .sheet-panel {
+    max-width: 560px;
+    margin-inline: auto;
+  }
+}
+
+@media (min-width: 521px) and (max-width: 768px) {
+  .rooms-toolbar,
+  .rooms-list {
+    width: 100%;
+    max-width: 600px;
+    margin-inline: auto;
+  }
+}
+
+/* 좁은 폰: 헤더 컨트롤을 두 줄 안에 */
+@media (max-width: 520px) {
+  .public-page {
+    gap: var(--sp-4);
+  }
+
+  .public-header .action-row {
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+
+  .public-header .seg-group {
+    flex-wrap: nowrap;
+  }
+
+  .public-header .seg-btn {
+    min-height: 36px;
+    min-width: 0;
+    padding: var(--sp-1) var(--sp-2);
+  }
+
+  .public-header .btn {
+    min-height: 40px;
+    padding: var(--sp-1) var(--sp-3);
+    font-size: var(--fs-13);
+    white-space: nowrap;
+  }
+}
+
+/* 좁은 폰의 대화 헤더: 방 이름이 보이도록 '참가자' 버튼은 아이콘만 */
+@media (max-width: 480px) {
+  .chat-header-right .btn-label {
+    display: none;
+  }
+
+  .chat-header-right .btn.mobile-only {
+    padding: var(--sp-2);
+  }
+}
+
+/* 터치 기기: 보조 동작도 누르기 편한 크기로 */
+@media (pointer: coarse) {
+  .msg-reply-btn {
+    min-height: 40px;
+    margin: -10px 0 -10px var(--sp-1);
+    padding: 6px var(--sp-3);
+  }
+
+  .check-inline {
+    min-height: 44px;
+  }
+
+  .guest-key-notice .mini-action-btn {
+    min-height: 44px;
+  }
+}
