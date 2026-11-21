@@ -182,7 +182,8 @@ export function createSheetManager(sheetRoot) {
     });
 
     const firstInput = bodyBox.querySelector("input:not([disabled]), textarea:not([disabled]), button:not([disabled])");
-    (firstInput || closeBtn).focus();
+    // 포커스가 아래쪽 첫 컨트롤로 가면서 시트 내용이 위에서부터 잘려 스크롤되지 않게 한다.
+    (firstInput || closeBtn).focus({ preventScroll: true });
   }
 
   return { openSheet, closeSheet };
