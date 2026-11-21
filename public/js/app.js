@@ -118,6 +118,7 @@ const state = {
   mobilePane: "rooms", // 'rooms' | 'chat' | 'settings'
   settingsOpen: false,
   rightPanelCollapsed: false,
+  guestNoticeCollapsed: false,
 
   statusBanner: null, // { kind: 'warn'|'danger'|'accent', text: string }
   offline: typeof navigator !== "undefined" ? !navigator.onLine : false,
@@ -187,6 +188,7 @@ function resetSessionView() {
   state.mobilePane = "rooms";
   state.settingsOpen = false;
   state.rightPanelCollapsed = false;
+  state.guestNoticeCollapsed = false;
 }
 
 function closeSpace() {
@@ -2998,6 +3000,45 @@ function renderGuestRoomApp() {
     return;
   }
 
+  // 접을 수 있는 상단 열쇠 주의 안내 (3.2 #9 정본 문구)
+  const keyNoticeBar = state.guestNoticeCollapsed
+    ? el(
+        "div",
+        { className: "trust-strip" },
+        el("span", { text: "열쇠 보안 안내 접힘" }),
+        el(
+          "button",
+          {
+            type: "button",
+            className: "mini-action-btn",
+            onClick: () => {
+              state.guestNoticeCollapsed = false;
+              renderGuestRoomApp();
+            },
+          },
+          icon("chevronDown", "icon-sm"),
+          "안내 펼치기",
+        ),
+      )
+    : el(
+        "div",
+        { className: "guest-key-notice" },
+        el("span", { text: "이 링크가 열쇠예요. 다른 사람에게 보내지 마세요" }),
+        el(
+          "button",
+          {
+            type: "button",
+            className: "mini-action-btn",
+            onClick: () => {
+              state.guestNoticeCollapsed = true;
+              renderGuestRoomApp();
+            },
+          },
+          icon("chevronUp", "icon-sm"),
+          "접기",
+        ),
+      );
+
   const rememberGuest = el("input", {
     type: "checkbox",
     checked: isRoomRemembered(roomId),
@@ -3024,6 +3065,7 @@ function renderGuestRoomApp() {
   const shell = el(
     "div",
     { className: "guest-shell" },
+    keyNoticeBar,
     el(
       "header",
       { className: "pane-topbar" },

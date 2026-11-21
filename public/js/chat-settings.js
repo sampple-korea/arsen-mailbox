@@ -128,7 +128,7 @@ export function getChatPreferences() {
 
 function shortcutHintTextFor(sendKey) {
   return sendKey === "ctrl_enter"
-    ? "Ctrl+Enter 전송 · Enter 줄바꿈"
+    ? "Ctrl+Enter(⌘+Enter) 전송 · Enter 줄바꿈"
     : "Enter 전송 · Shift+Enter 줄바꿈";
 }
 

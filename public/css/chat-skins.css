@@ -802,6 +802,12 @@
   color: var(--chat-canvas-muted);
 }
 
+.guest-shell > .trust-strip {
+  background: var(--chat-strip-bg);
+  color: var(--chat-strip-ink);
+  border-bottom-color: var(--chat-topbar-line);
+}
+
 .chat-pane .composer-wrap,
 .guest-shell > .composer-wrap {
   background: var(--chat-composer-bg);
