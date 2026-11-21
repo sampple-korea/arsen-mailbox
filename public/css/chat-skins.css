@@ -823,6 +823,13 @@
   line-height: var(--chat-line-height);
 }
 
+@media (pointer: coarse) {
+  .chat-pane .composer-input,
+  .guest-shell > .composer-wrap .composer-input {
+    font-size: max(var(--fs-16), var(--chat-font-size));
+  }
+}
+
 .chat-pane .date-divider,
 .chat-skin-preview .date-divider {
   color: var(--chat-canvas-muted);
@@ -1011,6 +1018,15 @@
   min-width: 0;
 }
 
+:root[data-chat-skin="workspace"] .chat-pane .msg-row .msg-bubble-row {
+  width: 100%;
+  flex-direction: row;
+}
+
+:root[data-chat-skin="workspace"] .chat-pane .msg-row.is-mine .avatar-spacer {
+  display: block;
+}
+
 :root[data-chat-skin="workspace"] .chat-pane .msg-row .avatar,
 .chat-skin-preview[data-preview-skin="workspace"] .msg-row .avatar {
   border-radius: 8px;
@@ -1080,6 +1096,10 @@
 .chat-skin-preview[data-preview-density="compact"] .msg-row .avatar {
   width: 28px;
   height: 28px;
+}
+
+:root[data-chat-density="compact"] .chat-pane .avatar-spacer {
+  width: 28px;
 }
 
 :root[data-chat-skin="workspace"][data-chat-density="compact"] .chat-pane .msg-row.is-mine:not(:has(.workspace-own-avatar))::before,

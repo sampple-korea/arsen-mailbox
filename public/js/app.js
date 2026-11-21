@@ -1618,8 +1618,9 @@ function renderMessagesTimeline(scrollBox, prepended = false) {
 
     // 같은 사람이 5분 안에 이어 쓴 글은 한 묶음으로 보여 아바타·이름 반복을 없앤다.
     const senderKey = String(m.relayed_for || m.participant_id || m.sender);
-    const grouped = prevSender === senderKey && m.created_at - prevAt < 300;
-    prevSender = senderKey;
+    const grouped = !serverRelayed && prevSender === senderKey && m.created_at - prevAt < 300;
+    // Relay attribution belongs on each message, even next to a reply from the same assistant.
+    prevSender = serverRelayed ? null : senderKey;
     prevAt = m.created_at;
 
     const replyBtn = el(
@@ -1671,7 +1672,7 @@ function renderMessagesTimeline(scrollBox, prepended = false) {
     );
 
     const metaRow = grouped
-      ? el("span", { className: "sr-only", text: displaySender })
+      ? el("span", { className: "sr-only", text: `${displaySender} · ${formatTime(m.created_at)}` })
       : isMine
       ? el(
           "div",
@@ -1699,8 +1700,10 @@ function renderMessagesTimeline(scrollBox, prepended = false) {
     // 터치에서는 말풍선을 눌러 답장 버튼을 연다(링크·버튼을 누른 경우는 제외).
     bubble.addEventListener("click", (e) => {
       if (!window.matchMedia("(pointer: coarse)").matches || e.target.closest("a,button")) return;
-      state.actionMsgId = state.actionMsgId === m.id ? null : m.id;
-      renderMessagesTimeline(scrollBox);
+      const showActions = state.actionMsgId !== m.id;
+      scrollBox.querySelector(".msg-row.show-actions")?.classList.remove("show-actions");
+      state.actionMsgId = showActions ? m.id : null;
+      row.classList.toggle("show-actions", showActions);
     });
 
     const row = el(
@@ -2147,7 +2150,9 @@ function buildComposer({ isGuest }) {
     textarea.rows = 1;
     if (val) {
       const newlineRows = val.split("\n").length;
-      const wrapRows = Math.max(1, Math.round((textarea.scrollHeight - 20) / 23.25));
+      const size = getComputedStyle(textarea);
+      const padding = parseFloat(size.paddingTop) + parseFloat(size.paddingBottom);
+      const wrapRows = Math.max(1, Math.round((textarea.scrollHeight - padding) / parseFloat(size.lineHeight)));
       textarea.rows = Math.min(6, Math.max(newlineRows, wrapRows));
     }
     const err = val.trim() ? validateMessageInput(val) : "";
@@ -2963,6 +2968,7 @@ function renderOwnerApp() {
               {
                 type: "button",
                 className: "btn btn-nowrap",
+                "aria-label": "참가자 넣기",
                 onClick: (e) => triggerAddParticipant(e.currentTarget),
               },
               icon("plus", "icon-sm"),

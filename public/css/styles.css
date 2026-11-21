@@ -1108,6 +1108,10 @@ label {
   align-items: flex-end;
 }
 
+.msg-row.is-mine .avatar-spacer {
+  display: none;
+}
+
 .msg-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1191,10 +1195,10 @@ label {
   margin: 2px var(--sp-1) 0;
 }
 
-/* 답장: 말풍선 옆의 보조 동작. 마우스에서는 올렸을 때, 터치에서는 흐리게 항상 */
+/* 답장: 마우스 올림, 키보드 초점, 터치 선택에 맞춰 표시한다. */
 .msg-reply-btn {
-  width: 28px;
-  height: 28px;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -1226,13 +1230,16 @@ label {
 /* 터치: 말풍선을 누르면 그 글 옆에만 답장 버튼이 나온다(항상 떠 있으면 소음) */
 @media (pointer: coarse) {
   .msg-reply-btn {
-    display: none;
-    width: 36px;
-    height: 36px;
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
   }
 
-  .msg-row.show-actions .msg-reply-btn {
-    display: inline-flex;
+  .msg-row.show-actions .msg-reply-btn,
+  .msg-reply-btn:focus-visible {
+    position: static;
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 
@@ -1313,7 +1320,6 @@ label {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 .members-topbar .btn { white-space: nowrap; }
-.members-topbar .select { grid-column: 1 / -1; min-width: 0; }
 
 .members-body {
   flex: 1;
@@ -1912,6 +1918,10 @@ label {
     display: none;
   }
 
+  .members-toolbar .select {
+    font-size: var(--fs-16);
+  }
+
   .profile-device-options button {
     min-height: var(--control-h-sm);
   }
@@ -1990,8 +2000,6 @@ label:not(.check-row) {
 /* Private message images use the active chat surface and bubble radius. */
 .composer-add-image {
   flex: none;
-  min-width: 44px;
-  min-height: 44px;
 }
 
 .image-draft {
