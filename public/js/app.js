@@ -105,7 +105,8 @@ const state = {
 
   mobilePane: "rooms", // 'rooms' | 'chat' | 'settings'
   settingsOpen: false,
-  rightPanelCollapsed: false,
+  // 노트북 폭(~1024px)에서는 대화창이 좁아지므로 참가자 패널은 접힌 채 시작한다.
+  rightPanelCollapsed: window.innerWidth < 1200,
   guestNoticeCollapsed: false,
 
   statusBanner: null, // { kind: 'warn'|'danger'|'accent', text: string }
@@ -152,7 +153,7 @@ function resetSessionView() {
   state.lastOverviewAt = 0;
   state.mobilePane = "rooms";
   state.settingsOpen = false;
-  state.rightPanelCollapsed = false;
+  state.rightPanelCollapsed = window.innerWidth < 1200;
   state.guestNoticeCollapsed = false;
 }
 

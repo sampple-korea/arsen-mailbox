@@ -1945,3 +1945,9 @@ label {
 .member-row {
   flex-shrink: 0;
 }
+
+@media (pointer: coarse) {
+  .public-header .seg-btn {
+    min-height: 40px;
+  }
+}
