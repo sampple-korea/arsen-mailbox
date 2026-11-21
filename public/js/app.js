@@ -53,6 +53,7 @@ import {
   createSheetManager,
   makeTwoStepButton,
   openAddParticipantSheet,
+  openMessageSheet,
   openMobileMembersSheet,
   openParticipantDetailSheet,
   openRelaySheet,
@@ -114,7 +115,6 @@ const state = {
   imageRevision: null,
   memberFilter: "all",
   guestMeta: { roomName: "", meName: "", meId: "" },
-  expandedMsgIds: new Set(),
   replyTo: null,
 
   mobilePane: "rooms", // 'rooms' | 'chat' | 'settings'
@@ -138,6 +138,7 @@ function bumpSessionGen() {
 }
 
 function bumpRoomGen() {
+  if (sheetRoot.querySelector(".message-full-text")) sheets.closeSheet();
   state.roomGen += 1;
   state.historyRequest = null;
 }
@@ -183,7 +184,6 @@ function resetSessionView() {
   state.retentionDays = 30;
   state.retentionRevision = 0;
   state.guestMeta = { roomName: "", meName: "", meId: "" };
-  state.expandedMsgIds.clear();
   state.replyTo = null;
   state.meInfo = null;
   state.lastOverviewAt = 0;
@@ -225,7 +225,6 @@ function wipeCurrentRoomCache(err) {
   state.questions.clear();
   state.notificationsArmed = false;
   resetHistory();
-  state.expandedMsgIds.clear();
   state.replyTo = null;
   if (state.currentRoomId) {
     state.participantsByRoom.delete(state.currentRoomId);
@@ -241,6 +240,8 @@ function pruneExpiredMessagesNow() {
   const beforeLen = state.messages.length;
   if (!beforeLen) return false;
   state.messages = filterFreshMessages(state.messages, nowSeconds(), state.retentionDays);
+  const openMessageId = sheetRoot.querySelector(".message-full-text")?.dataset.messageId;
+  if (openMessageId && !state.messages.some((message) => String(message.id) === openMessageId)) sheets.closeSheet();
   imageViewer.keep(state.messages.filter((message) => message.image).map(({ id }) => id));
   return state.messages.length !== beforeLen;
 }
@@ -1030,7 +1031,6 @@ function resetRoomView(roomId) {
   resetHistory();
   state.guestMeta = { roomName: "", meName: "", meId: "" };
   state.memberFilter = "all";
-  state.expandedMsgIds.clear();
   state.replyTo = null;
   state.settingsOpen = false;
 }
@@ -1569,28 +1569,24 @@ function renderMessagesTimeline(scrollBox, prepended = false) {
 
     const bodyNode = buildSafeMessageNodes(m.text);
     const longMsg = isLongMessage(m.text);
-    const expanded = state.expandedMsgIds.has(m.id);
-    if (longMsg && !expanded) {
-      bodyNode.classList.add("is-clamped");
-    }
+    if (longMsg) bodyNode.classList.add("is-clamped");
 
-    let moreBtn = null;
-    if (longMsg) {
-      moreBtn = el(
-        "button",
-        {
+    const moreBtn = longMsg
+      ? el("button", {
           type: "button",
           className: "mini-action-btn",
-          "aria-expanded": String(expanded),
-          onClick: () => {
-            if (state.expandedMsgIds.has(m.id)) state.expandedMsgIds.delete(m.id);
-            else state.expandedMsgIds.add(m.id);
-            renderMessagesTimeline(scrollBox);
-          },
-        },
-        expanded ? "접기" : "더 보기",
-      );
-    }
+          "aria-haspopup": "dialog",
+          onClick: (e) => openMessageSheet(sheets, {
+            messageId: m.id,
+            sender: displaySender,
+            when: `${formatDateLabel(m.created_at)} ${formatTime(m.created_at)}`,
+            text: m.text,
+            relayed: serverRelayed,
+            hasImage: Boolean(m.image),
+            trigger: e.currentTarget,
+          }),
+        }, "전체보기")
+      : null;
 
     const replyBtn = el(
       "button",
