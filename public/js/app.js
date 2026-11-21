@@ -105,6 +105,7 @@ const state = {
   mobilePane: "rooms", // 'rooms' | 'chat' | 'settings'
   settingsOpen: false,
   // 노트북 폭(~1024px)에서는 대화창이 좁아지므로 참가자 패널은 접힌 채 시작한다.
+  actionMsgId: null,
   rightPanelCollapsed: window.innerWidth < 1200,
 
   statusBanner: null, // { kind: 'warn'|'danger'|'accent', text: string }
@@ -385,11 +386,11 @@ function renderLandingPage() {
         )
       : null;
 
+    if (savedBanner) main.appendChild(savedBanner);
     main.appendChild(
       el(
         "section",
         { className: "hero-card", "aria-labelledby": "hero-heading" },
-        savedBanner,
         el("h1", { id: "hero-heading", className: "hero-lead", text: HERO_TAGLINE }),
         el("div", { className: "hero-illustration" }, buildHeroIllustration()),
         el(
@@ -1383,10 +1384,14 @@ function renderMessagesTimeline(scrollBox) {
   const ownerSeat = members.find((p) => p.is_owner);
   let prevDateKey = "";
 
+  let prevSender = null;
+  let prevAt = 0;
   for (const m of fresh) {
     const dk = dateKeyOf(m.created_at);
-    if (dk && dk !== prevDateKey) {
+    const newDay = Boolean(dk && dk !== prevDateKey);
+    if (newDay) {
       prevDateKey = dk;
+      prevSender = null;
       scrollBox.appendChild(
         el("div", { className: "date-divider", text: formatDateLabel(m.created_at) }),
       );
@@ -1435,12 +1440,19 @@ function renderMessagesTimeline(scrollBox) {
         )
       : null;
 
+    // 같은 사람이 5분 안에 이어 쓴 글은 한 묶음으로 보여 아바타·이름 반복을 없앤다.
+    const senderKey = String(m.relayed_for || m.participant_id || m.sender);
+    const grouped = prevSender === senderKey && m.created_at - prevAt < 300;
+    prevSender = senderKey;
+    prevAt = m.created_at;
+
     const replyBtn = el(
       "button",
       {
         type: "button",
         className: "msg-reply-btn",
         "aria-label": `${displaySender}의 글에 답장`,
+        title: "답장",
         onClick: () => {
           state.replyTo = { id: m.id, sender: m.sender };
           syncReplyBar();
@@ -1448,7 +1460,6 @@ function renderMessagesTimeline(scrollBox) {
         },
       },
       icon("reply", "icon-sm"),
-      "답장",
     );
     // 이름과 같은 종류 칩("부이 [부이]")은 중복이라 생략한다.
     const sameLabel = kMeta.label.replace(/\s+/g, "").toLowerCase() === String(displaySender).replace(/\s+/g, "").toLowerCase();
@@ -1463,13 +1474,14 @@ function renderMessagesTimeline(scrollBox) {
       buildQuestionStatus(m, isGuest),
     );
 
-    const metaRow = isMine
+    const metaRow = grouped
+      ? el("span", { className: "sr-only", text: displaySender })
+      : isMine
       ? el(
           "div",
           { className: "msg-meta" },
           el("span", { className: "workspace-author", text: displaySender }),
-          el("span", { text: `내 글 · ${formatTime(m.created_at)}` }),
-          replyBtn,
+          el("time", { text: formatTime(m.created_at) }),
           participantNotes(matchedMember),
         )
       : el(
@@ -1484,20 +1496,28 @@ function renderMessagesTimeline(scrollBox) {
           serverRelayed
             ? el("span", { className: "chip chip-relay", text: "사용자가 대신 올림" })
             : null,
-          el("span", { text: formatTime(m.created_at) }),
-          replyBtn,
+          el("time", { text: formatTime(m.created_at) }),
           participantNotes(matchedMember),
         );
 
+    // 터치에서는 말풍선을 눌러 답장 버튼을 연다(링크·버튼을 누른 경우는 제외).
+    bubble.addEventListener("click", (e) => {
+      if (!window.matchMedia("(pointer: coarse)").matches || e.target.closest("a,button")) return;
+      state.actionMsgId = state.actionMsgId === m.id ? null : m.id;
+      renderMessagesTimeline(scrollBox);
+    });
+
     const row = el(
       "article",
-      { className: `msg-row${isMine ? " is-mine" : ""}` },
-      buildAvatar(displaySender, kMeta.id, isMine ? "workspace-own-avatar" : "", profileWithAvatar(matchedMember)),
+      { className: `msg-row${isMine ? " is-mine" : ""}${grouped ? " is-grouped" : ""}${state.actionMsgId === m.id ? " show-actions" : ""}` },
+      grouped
+        ? el("span", { className: "avatar-spacer", "aria-hidden": "true" })
+        : buildAvatar(displaySender, kMeta.id, isMine ? "workspace-own-avatar" : "", profileWithAvatar(matchedMember)),
       el(
         "div",
         { className: "msg-col" },
         metaRow,
-        bubble,
+        el("div", { className: "msg-bubble-row" }, bubble, replyBtn),
         moreBtn ? el("div", { className: "msg-footer-actions" }, moreBtn) : null,
       ),
     );
