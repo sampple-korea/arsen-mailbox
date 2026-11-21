@@ -10,8 +10,8 @@ export const SPACE_LIMITS = Object.freeze({
   rooms: 5,
   participants: 8,
   messages_per_day: 500,
-  message_bytes: 4096,
-  max_chars: 2000,
+  message_bytes: 16384,
+  max_chars: 6000,
   retention_days: 30,
   assistant_read_seconds: 30,
 });
@@ -279,7 +279,7 @@ export const ERROR_MESSAGES = {
   signup_closed: "지금은 새 공간 가입이 일시 중지되어 있습니다. 잠시 뒤 다시 확인해 주세요.",
   key_epoch_invalid: "서버 열쇠 세대가 갱신되어 열쇠를 다시 발급받아야 합니다.",
   text_sensitive: "비밀번호·인증번호·열쇠처럼 보이는 내용은 보낼 수 없습니다.",
-  text_too_long: "글이 너무 깁니다(최대 2,000자 · 4KB 이내).",
+  text_too_long: "글이 너무 깁니다(최대 6,000자 · 16KB 이내). 나눠서 보내 주세요.",
   offline: "오프라인 상태입니다. 인터넷 연결이 돌아오면 자동으로 다시 읽습니다.",
   network: "서버에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.",
 };
