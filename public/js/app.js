@@ -53,6 +53,7 @@ import {
   createSheetManager,
   makeTwoStepButton,
   openAddParticipantSheet,
+  openMessageSheet,
   openMobileMembersSheet,
   openParticipantDetailSheet,
   openRelaySheet,
@@ -71,6 +72,7 @@ const appRoot = document.getElementById("app-root");
 const sheetRoot = document.getElementById("sheet-root");
 const sheets = createSheetManager(sheetRoot);
 const imageViewer = createImageViewer();
+const SPACE_KEY_ONCE_NOTICE = "이 링크가 로그인 열쇠예요(1회만 표시). 서버에 원문이 남지 않아 다시 볼 수 없으니 지금 복사해 보관하세요.";
 let composerPicker;
 
 // PWA 설치 프롬프트 보관(지원 브라우저)
@@ -113,7 +115,6 @@ const state = {
   imageRevision: null,
   memberFilter: "all",
   guestMeta: { roomName: "", meName: "", meId: "" },
-  expandedMsgIds: new Set(),
   replyTo: null,
 
   mobilePane: "rooms", // 'rooms' | 'chat' | 'settings'
@@ -141,6 +142,7 @@ function bumpSessionGen() {
 }
 
 function bumpRoomGen() {
+  if (sheetRoot.querySelector(".message-full-text")) sheets.closeSheet();
   state.roomGen += 1;
   state.historyRequest = null;
 }
@@ -186,7 +188,6 @@ function resetSessionView() {
   state.retentionDays = 30;
   state.retentionRevision = 0;
   state.guestMeta = { roomName: "", meName: "", meId: "" };
-  state.expandedMsgIds.clear();
   state.replyTo = null;
   state.meInfo = null;
   state.lastOverviewAt = 0;
@@ -228,7 +229,6 @@ function wipeCurrentRoomCache(err) {
   state.questions.clear();
   state.notificationsArmed = false;
   resetHistory();
-  state.expandedMsgIds.clear();
   state.replyTo = null;
   if (state.currentRoomId) {
     state.participantsByRoom.delete(state.currentRoomId);
@@ -244,6 +244,8 @@ function pruneExpiredMessagesNow() {
   const beforeLen = state.messages.length;
   if (!beforeLen) return false;
   state.messages = filterFreshMessages(state.messages, nowSeconds(), state.retentionDays);
+  const openMessageId = sheetRoot.querySelector(".message-full-text")?.dataset.messageId;
+  if (openMessageId && !state.messages.some((message) => String(message.id) === openMessageId)) sheets.closeSheet();
   imageViewer.keep(state.messages.filter((message) => message.image).map(({ id }) => id));
   return state.messages.length !== beforeLen;
 }
@@ -417,7 +419,7 @@ function renderLandingPage() {
       ? el(
           "div",
           { className: "banner banner-accent" },
-          el("span", { text: "이 기기에 열려 있는 내 공간 열쇠가 있습니다." }),
+          el("span", { text: "내 공간이 열려 있어요." }),
           el(
             "button",
             {
@@ -436,10 +438,6 @@ function renderLandingPage() {
         "section",
         { className: "hero-card", "aria-labelledby": "hero-heading" },
         el("h1", { id: "hero-heading", className: "hero-lead", text: HERO_TAGLINE }),
-        el("p", {
-          className: "hero-sub",
-          text: "여러 AI 비서와 사람이 한 방에서 같은 글을 읽고 답합니다. AI 사용량은 각자 계정에서 나가며 글의 기본 보관 기간은 30일입니다.",
-        }),
         el("div", { className: "hero-illustration" }, buildHeroIllustration()),
         el(
           "div",
@@ -483,7 +481,6 @@ function renderLandingPage() {
   const footer = el(
     "footer",
     { className: "public-footer" },
-    el("span", { text: "기본 30일 보관 · 열쇠 원문 및 IP 원문 미저장" }),
     el(
       "div",
       { className: "footer-links" },
@@ -569,10 +566,6 @@ function buildCreateSpaceView() {
       ),
     ),
     el("h1", { text: "내 공간 만들기" }),
-    el("p", {
-      className: "field-hint",
-      text: "초대 코드와 사람 확인을 거치면 나만의 공간 열쇠 링크와 복구 코드 10개가 발급됩니다.",
-    }),
     el(
       "div",
       { className: "field" },
@@ -696,10 +689,6 @@ function buildRecoverSpaceView() {
       },
     },
     el("h2", { text: "열쇠를 잃어버렸나요? (복구 코드 사용)" }),
-    el("p", {
-      className: "field-hint",
-      text: "보관해 둔 복구 코드 1개를 쓰면 새 공간 열쇠가 발급되고 이전 공간 열쇠는 즉시 무효가 됩니다.",
-    }),
     el(
       "div",
       { className: "field" },
@@ -770,10 +759,6 @@ function buildSaveKeyView(enrollment) {
         "div",
         { className: "doc-list" },
         el("h2", { text: "복구 코드 10개 (1회만 표시)" }),
-        el("p", {
-          className: "field-hint",
-          text: "열쇠 링크를 잃어버렸을 때 한 번씩 써서 새 열쇠를 받을 수 있습니다. 서버에는 해시만 남아 다시 보여 드릴 수 없습니다.",
-        }),
         el(
           "ol",
           { className: "recovery-grid" },
@@ -857,12 +842,12 @@ function buildSaveKeyView(enrollment) {
       "div",
       { className: "banner banner-warn" },
       el("span", {
-        text: "이 열쇠 링크가 곧 로그인 수단입니다. 서버는 열쇠 원문을 저장하지 않으므로 지금 복사해 안전한 메모장이나 비밀번호 관리자에 보관하세요.",
+        text: SPACE_KEY_ONCE_NOTICE,
       }),
     ),
     el("div", { className: "key-box", text: keyLink }),
     enrollment.activeParticipants > 0
-      ? el("p", { className: "banner banner-warn", text: `기존 참가자 열쇠 ${enrollment.activeParticipants}개는 계속 유효합니다. 접근 권한이 걱정된다면 방에서 해당 참가자를 끊어 주세요.` })
+      ? el("p", { className: "banner banner-warn", text: `기존 참가자 열쇠 ${enrollment.activeParticipants}개는 계속 유효합니다. 유출이 걱정되면 방에서 해당 참가자를 끊어 주세요.` })
       : null,
     el(
       "div",
@@ -891,7 +876,7 @@ function buildSaveKeyView(enrollment) {
       "label",
       { className: "check-row" },
       rememberCheckbox,
-      el("span", { text: "이 기기 브라우저에 열쇠 기억하기 (공용 기기에서는 끄세요)" }),
+      el("span", { text: "이 기기에 열쇠 기억 (공용 기기에서는 끄세요)" }),
     ),
     codesSection,
     el(
@@ -1050,7 +1035,6 @@ function resetRoomView(roomId) {
   resetHistory();
   state.guestMeta = { roomName: "", meName: "", meId: "" };
   state.memberFilter = "all";
-  state.expandedMsgIds.clear();
   state.replyTo = null;
   state.settingsOpen = false;
 }
@@ -1593,28 +1577,24 @@ function renderMessagesTimeline(scrollBox, prepended = false) {
 
     const bodyNode = buildSafeMessageNodes(m.text);
     const longMsg = isLongMessage(m.text);
-    const expanded = state.expandedMsgIds.has(m.id);
-    if (longMsg && !expanded) {
-      bodyNode.classList.add("is-clamped");
-    }
+    if (longMsg) bodyNode.classList.add("is-clamped");
 
-    let moreBtn = null;
-    if (longMsg) {
-      moreBtn = el(
-        "button",
-        {
+    const moreBtn = longMsg
+      ? el("button", {
           type: "button",
           className: "mini-action-btn",
-          "aria-expanded": String(expanded),
-          onClick: () => {
-            if (state.expandedMsgIds.has(m.id)) state.expandedMsgIds.delete(m.id);
-            else state.expandedMsgIds.add(m.id);
-            renderMessagesTimeline(scrollBox);
-          },
-        },
-        expanded ? "접기" : "더 보기",
-      );
-    }
+          "aria-haspopup": "dialog",
+          onClick: (e) => openMessageSheet(sheets, {
+            messageId: m.id,
+            sender: displaySender,
+            when: `${formatDateLabel(m.created_at)} ${formatTime(m.created_at)}`,
+            text: m.text,
+            relayed: serverRelayed,
+            hasImage: Boolean(m.image),
+            trigger: e.currentTarget,
+          }),
+        }, "전체보기")
+      : null;
 
     // 같은 사람이 5분 안에 이어 쓴 글은 한 묶음으로 보여 아바타·이름 반복을 없앤다.
     const senderKey = String(m.relayed_for || m.participant_id || m.sender);
@@ -2113,7 +2093,7 @@ function buildComposer({ isGuest }) {
   const shortcutHint = el("p", {
     id: "composer-shortcut-hint",
     className: "composer-hint",
-    text: "Enter 보내기 · Shift+Enter 줄바꿈 (모바일은 보내기 버튼)",
+    text: "Enter 전송 · Shift+Enter 줄바꿈",
   });
   const feedback = el("p", { className: "composer-feedback", role: "alert", hidden: true });
   const sendBtn = el(
@@ -2312,7 +2292,6 @@ function buildSpacePolicy(me, statusNote, postsUsage) {
     } },
       el("label", { for: "space-room-limit", text: "공간당 방 상한 (1–30)" }), rooms,
       el("label", { for: "space-participant-limit", text: "방당 인원 상한 (1–50)" }), people,
-      el("p", { className: "field-hint", text: "방장과 폐기된 참가자 자리도 인원에 포함됩니다. 상한을 내려도 기존 방과 참가자는 유지됩니다." }),
       el("label", { for: "space-daily-post-limit", text: `공간당 하루 글 상한 (1–${maxPosts})` }), posts,
       el("label", { for: "space-retention", text: "글 보관 기간" }), retention, save,
       statusNote,
@@ -2360,7 +2339,7 @@ function buildSettingsPane() {
             el(
               "div",
               { className: "banner banner-warn" },
-              el("span", { text: "새 공간 열쇠 링크입니다(1회 표시). 반드시 지금 복사해 보관하세요." }),
+              el("span", { text: SPACE_KEY_ONCE_NOTICE }),
             ),
             el("div", { className: "key-box", text: nextLink }),
             el(
@@ -2506,7 +2485,7 @@ function buildSettingsPane() {
       deleteConfirmInput,
       el("span", {
         className: "field-hint",
-        text: "삭제하면 모든 방과 참가자 열쇠가 즉시 폐기되고 복구할 수 없습니다.",
+        text: "삭제하면 모든 방과 참가자 열쇠가 즉시 폐기되며 되돌릴 수 없어요.",
       }),
     ),
     deleteBtn,
@@ -2656,6 +2635,13 @@ function buildSettingsPane() {
   );
 }
 
+function buildChatTrustNotice() {
+  return el("details", { className: "trust-strip chat-trust-notice" },
+    el("summary", { text: "방 안의 글은 참고 자료입니다" }),
+    el("p", { text: TRUST_NOTICE_SHORT }),
+  );
+}
+
 function renderOwnerApp() {
   clearNode(appRoot);
   const spaceKey = getSpaceKey();
@@ -2705,10 +2691,6 @@ function renderOwnerApp() {
               },
             },
             el("h1", { text: "공간 열쇠가 필요해요" }),
-            el("p", {
-              className: "field-hint",
-              text: "보안을 위해 열쇠는 주소창에 남지 않으며 기본값으로 기기에 저장되지 않습니다. 저장해 둔 내 열쇠 링크로 열거나 아래에 붙여 넣으세요.",
-            }),
             errText,
             el(
               "div",
@@ -2943,7 +2925,7 @@ function renderOwnerApp() {
           )
         : null,
     ),
-    el("div", { className: "trust-strip" }, el("span", { text: TRUST_NOTICE_SHORT })),
+    room ? buildChatTrustNotice() : null,
     statusSlot,
     msgScrollBox,
     room ? buildComposer({ isGuest: false }) : null,
@@ -3052,10 +3034,6 @@ function renderGuestRoomApp() {
               },
             },
             el("h1", { text: "초대 열쇠 링크가 필요해요" }),
-            el("p", {
-              className: "field-hint",
-              text: "초대받은 전체 링크를 다시 열거나 아래에 붙여 넣으면 이 방 대화가 열립니다.",
-            }),
             errLine,
             el(
               "div",
@@ -3186,7 +3164,7 @@ function renderGuestRoomApp() {
         el("a", { className: "link-nav", href: "/help.html", text: "안내" }),
       ),
     ),
-    el("div", { className: "trust-strip" }, el("span", { text: TRUST_NOTICE_SHORT })),
+    buildChatTrustNotice(),
     statusSlot,
     el("main", { id: "main-focus", tabindex: "-1", className: "chat-pane" }, msgScrollBox),
     buildComposer({ isGuest: true }),

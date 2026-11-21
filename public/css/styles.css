@@ -1033,6 +1033,27 @@ label {
   text-overflow: ellipsis;
 }
 
+.trust-strip.chat-trust-notice {
+  display: block;
+  flex-shrink: 0;
+  padding-block: 0;
+}
+
+.chat-trust-notice > summary {
+  min-height: var(--control-h-sm);
+  padding-block: var(--sp-2);
+  cursor: pointer;
+}
+
+.chat-trust-notice > summary:focus-visible {
+  outline-offset: -2px;
+}
+
+.chat-trust-notice > p {
+  margin: 0;
+  padding-bottom: var(--sp-2);
+}
+
 .status-slot {
   padding: var(--sp-2) var(--sp-4) 0;
 }
@@ -1538,6 +1559,15 @@ label {
   gap: var(--sp-5);
 }
 
+.message-full-meta {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.message-full-text {
+  min-width: 0;
+}
+
 .kind-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1963,12 +1993,7 @@ label:not(.check-row) {
   min-height: 36px;
 }
 
-/* ---- 안내 띠·보조 문단(이 PR 단독으로도 깨지지 않도록 기존 요소의 스타일을 같은 기준으로 정의) ---- */
-.hero-sub {
-  font-size: var(--fs-15);
-  color: var(--muted);
-}
-
+/* 공통 안내 띠 */
 .trust-strip,
 .guest-key-notice {
   padding: var(--sp-2) max(var(--sp-4), calc((100% - var(--measure)) / 2));

@@ -9,8 +9,6 @@ import {
   DEFAULT_INTERVAL_MINUTES,
   INTERVAL_PRESETS,
   PARTICIPANT_KINDS,
-  READ_COOLDOWN_NOTE,
-  SCHEDULE_HONESTY_NOTE,
   errorMessage,
   kindMeta,
   resolveIntervalMinutes,
@@ -24,6 +22,7 @@ import {
   appendNodes,
   buildAvatar,
   buildLiveScheduleNode,
+  buildSafeMessageNodes,
   buildSafeTranscript,
   clearNode,
   describeAssistantSchedule,
@@ -533,7 +532,7 @@ export function openAddParticipantSheet(
         "div",
         { className: "banner banner-accent", hidden: true },
         el("span", {
-          text: "⇄ 답 옮기기(직접 붙여넣기) 기본·전용 · 하크는 외부 우편함 URL 자동 접속을 쓰지 않습니다. 자리를 만든 뒤 대화창의 [AI 답 옮기기]에서 최근 대화를 복사해 하크 답을 붙여 넣으세요.",
+          text: "하크는 [답 옮기기]로 직접 붙여넣어 씁니다.",
         }),
       );
 
@@ -543,9 +542,6 @@ export function openAddParticipantSheet(
         initialMinutes: initialSettings(selectedKind).interval_minutes,
         onChange: updateKindBadges,
       });
-      const intervalHint = el("p", { className: "field-hint" });
-      const cooldownHint = el("p", { className: "field-hint", text: READ_COOLDOWN_NOTE });
-      const honestyHint = el("p", { className: "field-hint", text: SCHEDULE_HONESTY_NOTE });
       const intervalSection = el(
         "div",
         { className: "field" },
@@ -555,9 +551,6 @@ export function openAddParticipantSheet(
           text: `확인 주기 (${INTERVAL_PRESETS.join("·")}분 또는 직접 입력)`,
         }),
         intervalControl.element,
-        intervalHint,
-        cooldownHint,
-        honestyHint,
       );
 
       const radioHeader = el("input", {
@@ -702,12 +695,6 @@ export function openAddParticipantSheet(
         intervalSection.hidden = !isAssistant || isHark;
         rememberSection.hidden = !isAssistant || isHark || !onRememberDefault;
         syncDeliveryUI();
-
-        if (isAssistant) {
-          intervalHint.textContent = selectedKind.id === "vooy"
-            ? "부이에서 Google 캘린더 감시를 설정했을 때 사용할 간격입니다." : selectedKind.usageHint;
-          cooldownHint.hidden = isHark;
-        }
       }
 
       const rememberStatus = el("p", { className: "field-hint", role: "status", "aria-live": "polite" });
@@ -1036,10 +1023,6 @@ export function openParticipantDetailSheet(
         ...PARTICIPANT_KINDS.filter((k) => k.kind === "assistant")
           .map((k) => el("option", { value: k.ai_type, text: k.label }))) : null;
       if (kindSelect) kindSelect.value = participant.ai_type || "other";
-      const harkNotice = el("p", { className: "field-hint",
-        text: "하크에는 연결 주소 대신 답 옮기기로 받은 답을 직접 붙여넣으세요.",
-        hidden: kindSelect?.value !== "hark" });
-      kindSelect?.addEventListener("change", () => { harkNotice.hidden = kindSelect.value !== "hark"; });
       const preset = el("select", { id: "member-avatar-preset", className: "select" },
         el("option", { value: "keep", text: "현재 이미지 유지" }),
         el("option", { value: "default", text: "기본 이미지로 복귀" }),
@@ -1073,7 +1056,7 @@ export function openParticipantDetailSheet(
       } },
         el("label", { for: "member-rename-input", text: "표시 이름" }), name,
         kindSelect ? el("label", { for: "member-ai-type", text: "비서 종류" }) : null,
-        kindSelect, harkNotice,
+        kindSelect,
         interval ? el("label", { for: "detail-member-interval", text: "확인 주기" }) : null, interval?.element,
         !participant.revoked ? el("label", { for: "member-avatar-preset", text: "참가자 이미지" }) : null,
         !participant.revoked ? preset : null,
@@ -1105,7 +1088,7 @@ export function openParticipantDetailSheet(
         actionBox.appendChild(
           el("p", {
             className: "field-hint",
-            text: "공간 주인 기본 자리는 개별 폐기할 수 없습니다. 열쇠 교체는 [설정 → 공간 키 재발급]에서 진행하세요.",
+            text: "공간 주인 자리는 폐기할 수 없어요.",
           }),
         );
       } else {
@@ -1165,7 +1148,6 @@ export function openParticipantDetailSheet(
       }
 
       appendNodes(bodyBox, headerCard, stageTrack, observed,
-        isAssistant ? el("p", { className: "field-hint", text: SCHEDULE_HONESTY_NOTE }) : null,
         wake, editForm, actionBox, statusNotice);
     },
   });
@@ -1411,10 +1393,6 @@ export function openRelaySheet(
           { className: "field" },
           el("label", { className: "field-label", for: "relay-answer-text", text: "② AI의 답 붙여넣기" }),
           answerArea,
-          el("span", {
-            className: "field-hint",
-            text: "올린 글에는 선택한 비서 프로필과 '사용자가 대신 올림' 표시가 붙으며, 비서의 자동 접속·최근 확인 시각으로는 기록되지 않습니다.",
-          }),
         ),
         errLine,
         submitBtn,
@@ -1435,6 +1413,53 @@ export function openRelaySheet(
         form.insertBefore(imagePicker.status, errLine);
       }
       bodyBox.appendChild(form);
+    },
+  });
+}
+
+export function openMessageSheet(sheets, { messageId, sender, when, text, relayed, hasImage, trigger }) {
+  sheets.openSheet({
+    title: "전체 보기",
+    trigger,
+    buildBody: (bodyBox) => {
+      const content = buildSafeMessageNodes(text);
+      content.classList.add("message-full-text");
+      content.dataset.messageId = String(messageId);
+      const status = el("div", { className: "field-hint", role: "status" });
+      const copyBtn = el("button", {
+        type: "button",
+        className: "btn btn-block",
+        onClick: async () => {
+          try {
+            await navigator.clipboard.writeText(text);
+            status.textContent = "글 전체를 복사했습니다.";
+          } catch {
+            status.textContent = "복사할 수 없습니다. 본문을 선택해 복사해 주세요.";
+          }
+        },
+      }, icon("copy", "icon-sm"), "전체 복사");
+
+      bodyBox.append(
+        el("p", {
+          className: "field-hint message-full-meta",
+          text: [sender, relayed ? "사용자가 대신 올림" : "", when].filter(Boolean).join(" · "),
+        }),
+        ...(hasImage ? [el("p", { className: "field-hint message-full-meta", text: "첨부 이미지는 대화에서 볼 수 있습니다." })] : []),
+        el("div", {}, copyBtn, status),
+        content,
+      );
+
+      const panel = bodyBox.closest("[role=dialog]");
+      panel.addEventListener("keydown", (event) => {
+        if (event.key !== "Tab") return;
+        const controls = [...panel.querySelectorAll("button:not(:disabled), a[href]")];
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (document.activeElement === (event.shiftKey ? first : last)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        }
+      });
     },
   });
 }
