@@ -12,6 +12,7 @@ import {
   POLL_OVERVIEW_IDLE_MS,
   SENSITIVE_PATTERN,
   SPACE_LIMITS,
+  TRUST_NOTICE_SHORT,
   errorMessage,
   kindMeta,
   validateMessageInput,
@@ -70,6 +71,7 @@ const appRoot = document.getElementById("app-root");
 const sheetRoot = document.getElementById("sheet-root");
 const sheets = createSheetManager(sheetRoot);
 const imageViewer = createImageViewer();
+const SPACE_KEY_ONCE_NOTICE = "이 링크가 로그인 열쇠예요(1회만 표시). 서버에 원문이 남지 않아 다시 볼 수 없으니 지금 복사해 보관하세요.";
 let composerPicker;
 
 // PWA 설치 프롬프트 보관(지원 브라우저)
@@ -835,12 +837,12 @@ function buildSaveKeyView(enrollment) {
       "div",
       { className: "banner banner-warn" },
       el("span", {
-        text: "이 링크가 로그인 열쇠예요. 지금 복사해 두세요.",
+        text: SPACE_KEY_ONCE_NOTICE,
       }),
     ),
     el("div", { className: "key-box", text: keyLink }),
     enrollment.activeParticipants > 0
-      ? el("p", { className: "banner banner-warn", text: `기존 참가자 열쇠 ${enrollment.activeParticipants}개는 계속 유효해요.` })
+      ? el("p", { className: "banner banner-warn", text: `기존 참가자 열쇠 ${enrollment.activeParticipants}개는 계속 유효합니다. 유출이 걱정되면 방에서 해당 참가자를 끊어 주세요.` })
       : null,
     el(
       "div",
@@ -869,7 +871,7 @@ function buildSaveKeyView(enrollment) {
       "label",
       { className: "check-row" },
       rememberCheckbox,
-      el("span", { text: "이 기기에 열쇠 기억" }),
+      el("span", { text: "이 기기에 열쇠 기억 (공용 기기에서는 끄세요)" }),
     ),
     codesSection,
     el(
@@ -2303,7 +2305,7 @@ function buildSettingsPane() {
             el(
               "div",
               { className: "banner banner-warn" },
-              el("span", { text: "새 열쇠 링크예요. 지금 복사해 두세요." }),
+              el("span", { text: SPACE_KEY_ONCE_NOTICE }),
             ),
             el("div", { className: "key-box", text: nextLink }),
             el(
@@ -2449,7 +2451,7 @@ function buildSettingsPane() {
       deleteConfirmInput,
       el("span", {
         className: "field-hint",
-        text: "되돌릴 수 없어요.",
+        text: "삭제하면 모든 방과 참가자 열쇠가 즉시 폐기되며 되돌릴 수 없어요.",
       }),
     ),
     deleteBtn,
@@ -2596,6 +2598,13 @@ function buildSettingsPane() {
         deleteForm,
       ),
     ),
+  );
+}
+
+function buildChatTrustNotice() {
+  return el("details", { className: "trust-strip chat-trust-notice" },
+    el("summary", { text: "방 안의 글은 참고 자료입니다" }),
+    el("p", { text: TRUST_NOTICE_SHORT }),
   );
 }
 
@@ -2881,6 +2890,7 @@ function renderOwnerApp() {
           )
         : null,
     ),
+    room ? buildChatTrustNotice() : null,
     statusSlot,
     msgScrollBox,
     room ? buildComposer({ isGuest: false }) : null,
@@ -3110,6 +3120,7 @@ function renderGuestRoomApp() {
         el("a", { className: "link-nav", href: "/help.html", text: "안내" }),
       ),
     ),
+    buildChatTrustNotice(),
     statusSlot,
     el("main", { id: "main-focus", tabindex: "-1", className: "chat-pane" }, msgScrollBox),
     buildComposer({ isGuest: true }),

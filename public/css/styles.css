@@ -906,6 +906,19 @@ label {
   gap: var(--sp-2);
 }
 
+.chat-trust-notice {
+  display: block;
+  flex-shrink: 0;
+}
+
+.chat-trust-notice > summary {
+  cursor: pointer;
+}
+
+.chat-trust-notice > p {
+  margin: var(--sp-2) 0 0;
+}
+
 .status-slot {
   padding: var(--sp-2) var(--sp-4) 0;
 }
