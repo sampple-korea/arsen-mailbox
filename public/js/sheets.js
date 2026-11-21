@@ -1011,7 +1011,7 @@ export function openParticipantDetailSheet(
         el(
           "div",
           { className: `stage-step${st.stage === 1 ? " is-active" : ""}` },
-          meta.manualRelayOnly ? "① 직접 답 옮기기" : "① 문구 만듦",
+          meta.manualRelayOnly ? "① 직접 답 옮기기" : "① 연결 대기",
         ),
         el(
           "div",
