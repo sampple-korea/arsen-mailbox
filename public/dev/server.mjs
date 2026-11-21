@@ -6,7 +6,7 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createMockStore } from "./mock.js?v=2.2.2";
+import { createMockStore } from "./mock.js?v=2.3.0";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_ROOT = path.resolve(__dirname, "..");

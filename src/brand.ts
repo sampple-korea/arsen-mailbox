@@ -9,7 +9,7 @@ export const SPACE_LIMITS = {
   assistant_read_seconds: 30,
   signups_per_ip_day: 3,
   d1_writes_per_day: 100_000,
-  signup_stop_writes: 70_000,
+  signup_stop_writes: 60_000,
 } as const;
 export const MAX_ROOMS = 30;
 export const MAX_ROOM_PARTICIPANTS = 50;

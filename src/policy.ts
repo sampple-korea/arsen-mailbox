@@ -84,8 +84,10 @@ export const LIMITS: Record<string, [number, number]> = {
   read: [20, 60], // per participant
   send: [6, 60], // per participant
   send_day: [200, 86400], // per participant
+  image_upload: [2, 60], // successful attachments per participant
   auth_fail: [30, 60], // per source address (hashed)
+  auth_fail_day: [300, 86400], // also bound one source’s daily reserve
   space: [60, 60],
-  space_day: [5000, 86400],
+  space_day: [10_000, 86400],
   admin: [60, 60], // per owner
 };

@@ -1,4 +1,5 @@
-import { assistantDefault } from "./assistant-defaults.js?v=2.2.2";
+import { createImagePicker } from "./images.js?v=2.3.0";
+import { assistantDefault } from "./assistant-defaults.js?v=2.3.0";
 // 시트·모달 화면 모음 (화면 6 참가자 넣기, 화면 7 참가자 상세·재발급, 답 옮기기, 새 방·방 수정)
 // - 보안 수칙 4: 참가자 추가 창과 재발급 창을 열 때마다 전달 방식을 기본값 '헤더(header)'로 초기화
 // - 보안 수칙 6: 연결 상태(created / connected / last_seen)는 추측하지 않고 서버가 준 status 값만 표시
@@ -17,8 +18,8 @@ import {
   validateIntervalMinutesInput,
   validateMessageInput,
   validateNameInput,
-} from "./constants.js?v=2.2.2";
-import { AVATAR_PRESETS, PARTICIPANT_FILTERS, avatarThumbnail, participantNotes, participantRole, participantRoleLabel } from "./participant-avatar.js?v=2.2.2";
+} from "./constants.js?v=2.3.0";
+import { AVATAR_PRESETS, PARTICIPANT_FILTERS, avatarThumbnail, participantNotes, participantRole, participantRoleLabel } from "./participant-avatar.js?v=2.3.0";
 import {
   appendNodes,
   buildAvatar,
@@ -30,8 +31,8 @@ import {
   formatAgo,
   icon,
   resolveLastCheckedSeconds,
-} from "./dom.js?v=2.2.2";
-import { getKindUsageCounts, recordKindUsage } from "./keystore.js?v=2.2.2";
+} from "./dom.js?v=2.3.0";
+import { getKindUsageCounts, recordKindUsage } from "./keystore.js?v=2.3.0";
 
 /** 서버가 돌려준 status 값만으로 3단계 표시 정보를 만든다(클라이언트 추측 금지) */
 export function serverParticipantStatus(p) {
@@ -1245,15 +1246,21 @@ export function openRelaySheet(
     retentionDays,
     trigger,
     onPostRelayed,
+    imageUploads = false,
+    imageMaxBytes,
+    imageMaxEdge,
+    requiresImage = () => false,
     onOpenAdd,
   },
 ) {
   const aiMembers = participants.filter((p) =>
     p.kind === "assistant" && !p.revoked && (!question || p.participant_id === initialParticipantId));
 
+  let imagePicker;
   sheets.openSheet({
     title: "AI 답 옮기기 (대신 올림)",
     trigger,
+    onDispose: () => imagePicker?.clear(),
     buildBody: (bodyBox, closeSheet) => {
       if (!aiMembers.length) {
         bodyBox.append(
@@ -1351,25 +1358,33 @@ export function openRelaySheet(
         "③ 선택한 AI 이름으로 올리기",
       );
 
+      let draft = null, sending = false;
       const form = el(
         "form",
         {
           className: "doc-list",
           onSubmit: async (e) => {
             e.preventDefault();
+            if (sending || imagePicker?.working) return;
             const checkErr = validateMessageInput(answerArea.value);
-            if (checkErr || !answerArea.value.trim()) {
-              errLine.textContent = checkErr || "붙여 넣을 답 본문을 입력해 주세요.";
+            if (checkErr || !draft && (!answerArea.value.trim() || requiresImage(aiSelect.value))) {
+              errLine.textContent = checkErr || (requiresImage(aiSelect.value)
+                ? "이 비서 이름으로 옮길 때는 이미지를 붙여 주세요."
+                : "옮길 답을 쓰거나 이미지를 붙여 주세요.");
               errLine.hidden = false;
               return;
             }
+            const original = submitBtn.textContent;
             errLine.hidden = true;
-            submitBtn.disabled = true;
+            sending = submitBtn.disabled = true;
+            imagePicker?.lock(true);
+            if (draft) submitBtn.textContent = "올리는 중…";
             try {
               const chosen = aiMembers.find((p) => p.participant_id === aiSelect.value);
               await onPostRelayed({
                 relayedFor: aiSelect.value,
                 text: answerArea.value.trim(),
+                image: draft?.blob,
               });
               if (chosen) {
                 recordKindUsage(kindMeta(chosen).ai_type);
@@ -1378,7 +1393,10 @@ export function openRelaySheet(
             } catch (err) {
               errLine.textContent = errorMessage(err);
               errLine.hidden = false;
-              submitBtn.disabled = false;
+            } finally {
+              sending = submitBtn.disabled = false;
+              submitBtn.textContent = original;
+              imagePicker?.lock(false);
             }
           },
         },
@@ -1405,6 +1423,20 @@ export function openRelaySheet(
         submitBtn,
       );
 
+      if (imageUploads) {
+        imagePicker = createImagePicker(answerArea, {
+          available: () => true,
+          maxBytes: () => imageMaxBytes,
+          maxEdge: () => imageMaxEdge,
+          active: () => answerArea.isConnected,
+          getDraft: () => draft,
+          setDraft: (value) => { draft = value; },
+          changed: () => { submitBtn.disabled = sending || imagePicker.working; },
+        });
+        form.insertBefore(el("div", { className: "action-row" }, ...imagePicker.buttons), errLine);
+        form.insertBefore(imagePicker.bar, errLine);
+        form.insertBefore(imagePicker.status, errLine);
+      }
       bodyBox.appendChild(form);
     },
   });
@@ -1521,7 +1553,9 @@ export function openRoomManageSheet(sheets, { room, trigger, onRenameRoom, onDel
             await onDeleteRoom(room.room_id);
             closeSheet();
           } catch (ex) {
-            errLine.textContent = errorMessage(ex);
+            errLine.textContent = ex?.code === "space_operation_quota"
+              ? "이 방의 글과 답변 연결이 한 번에 처리할 수 있는 한도를 넘었습니다. 참가자 열쇠를 끊어 접근을 막거나, 보관 기간이 끝난 글이 정리된 뒤 다시 시도해 주세요."
+              : errorMessage(ex);
             errLine.hidden = false;
           }
         },
