@@ -1892,7 +1892,7 @@ function buildComposer({ isGuest }) {
     id: "composer-textarea",
     className: "composer-input",
     rows: "1",
-    maxlength: "2000",
+    maxlength: String(SPACE_LIMITS.max_chars),
     placeholder: "메시지 입력…",
     "aria-label": "메시지 입력",
     "aria-describedby": "composer-shortcut-hint",

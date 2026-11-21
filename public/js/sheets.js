@@ -17,6 +17,7 @@ import {
   validateIntervalMinutesInput,
   validateMessageInput,
   validateNameInput,
+  SPACE_LIMITS,
 } from "./constants.js?v=2.2.2";
 import { AVATAR_PRESETS, PARTICIPANT_FILTERS, avatarThumbnail, participantNotes, participantRole, participantRoleLabel } from "./participant-avatar.js?v=2.2.2";
 import {
@@ -1338,7 +1339,7 @@ export function openRelaySheet(
         id: "relay-answer-text",
         className: "textarea",
         rows: "5",
-        maxlength: "2000",
+        maxlength: String(SPACE_LIMITS.max_chars),
         placeholder: "AI(예: 하크·챗GPT·제미나이)에게서 받은 답을 여기에 붙여 넣으세요",
       });
 
